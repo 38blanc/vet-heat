@@ -194,7 +194,9 @@ const KBNEG=IOS?'inputmode="text" autocapitalize="off" autocorrect="off" autocom
 const PH=k=>`<div class="ph">${J()[k].map((f,i)=>`<div><img src="${f}" alt="Foto ${i+1}"><button onclick="rmPh('${k}',${i})">✕</button></div>`).join('')}</div>`;
 
 /* ---------- pdf ---------- */
-function kmData(j){const k=j.km;return{centraal:k.centraal,typeB:k.aansl=='B',typeC:k.aansl=='C',typeBcode:k.aansl=='B'?k.code:'',typeCcode:k.aansl=='C'?k.code:'',gas:k.brandstof=='gas',aardgas:k.brandstof=='gas'&&k.gassoort=='aardgas',lpg:k.brandstof=='gas'&&k.gassoort=='lpg',gasAndere:k.brandstof=='gas'&&k.gassoort=='andere',gasAndereTxt:k.gasAndereTxt,
+/* op het attest staat 'type B …' / 'type C …' al voorgedrukt: enkel het getal (en eventueel achtervoegsel) invullen, bv. C33 -> 33, B11BS -> 11BS */
+const nrCode=c=>String(c||'').trim().replace(/^[BbCc]\s*/,'');
+function kmData(j){const k=j.km;return{centraal:k.centraal,typeB:k.aansl=='B',typeC:k.aansl=='C',typeBcode:k.aansl=='B'?nrCode(k.code):'',typeCcode:k.aansl=='C'?nrCode(k.code):'',gas:k.brandstof=='gas',aardgas:k.brandstof=='gas'&&k.gassoort=='aardgas',lpg:k.brandstof=='gas'&&k.gassoort=='lpg',gasAndere:k.brandstof=='gas'&&k.gassoort=='andere',gasAndereTxt:k.gasAndereTxt,
  nietPremix:k.brandstof=='gas'&&k.branderType=='nietpremix',premix:k.brandstof=='gas'&&k.branderType=='premix',ventilator:k.brandstof=='gas'&&k.branderType=='ventilator',vloeibaar:k.brandstof=='vloeibaar',vast:k.brandstof=='vast',pellets:k.brandstof=='vast'&&k.vastSoort=='pellets',blokken:k.brandstof=='vast'&&k.vastSoort=='blokken',vastAndere:k.brandstof=='vast'&&k.vastSoort=='andere',vastAndereTxt:k.vastAndereTxt}}
 function data(j,kind){const c=S.cfg,cs=cols(j),meet={};rowsFor(j).forEach(([r])=>{const m=j.verb.meet[r];if(m){meet[r]={};cs.forEach(x=>{if(m[x])meet[r][x]=m[x]})}});
  const okNok={},checks={};OKR.forEach(r=>{if(rowsFor(j).some(x=>x[0]==r))okNok[r]=j.verb.okNok[r]});chkFor(j).forEach(x=>{checks[x[0]]=j.verb.checks[x[0]]});

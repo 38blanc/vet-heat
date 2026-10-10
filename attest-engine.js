@@ -280,16 +280,23 @@
         if (line) flush();
         y -= 10;
       }
-      for (const b of bijlagen) {
-        const bytes = b64ToBytes(b.data.split(',')[1]);
-        const img = /^data:image\/jpe?g/.test(b.data) ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
-        const maxW = 515, maxH = 700;
-        const sc = Math.min(maxW / img.width, maxH / img.height, 1.5);
-        const w = img.width * sc, h = img.height * sc;
-        if (y - h - 20 < 40) { pg = pdf.addPage([595.28, 841.89]); head(); }
-        pg.drawText(clean(b.titel || 'Afdruk meettoestel'), { x: 40, y, size: 9.5, font: bold }); y -= 8;
-        pg.drawImage(img, { x: 40, y: y - h, width: w, height: h });
-        y -= h + 20;
+      /* alle afdrukken van het meettoestel samen op één pagina, naast elkaar (max. 3 per rij) */
+      if (bijlagen.length) {
+        const imgs = [];
+        for (const b of bijlagen) {
+          const bytes = b64ToBytes(b.data.split(',')[1]);
+          imgs.push({ t: clean(b.titel || 'Afdruk meettoestel'), img: /^data:image\/jpe?g/.test(b.data) ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes) });
+        }
+        if (y < 420 && longTxt.length) { pg = pdf.addPage([595.28, 841.89]); head(); }
+        const n = imgs.length, cols = Math.min(n, 3), rows = Math.ceil(n / cols), gap = 12, TS = 8.5, TH = 24;
+        const cw = (515 - (cols - 1) * gap) / cols, ch = (y - 40 - rows * (TH + gap)) / rows;
+        const lines = (t) => { const out = []; let l = ''; t.split(' ').forEach((w) => { const u = l ? l + ' ' + w : w; if (l && bold.widthOfTextAtSize(u, TS) > cw) { out.push(l); l = w; } else l = u; }); out.push(l); return out.slice(0, 2); };
+        imgs.forEach((o, i) => {
+          const c = i % cols, r = Math.floor(i / cols), x = 40 + c * (cw + gap), top = y - r * (ch + TH + gap);
+          lines(o.t).forEach((l, k) => pg.drawText(l, { x, y: top - k * 10.5, size: TS, font: bold }));
+          const sc = Math.min(cw / o.img.width, ch / o.img.height, 1.5), w = o.img.width * sc, h = o.img.height * sc;
+          pg.drawImage(o.img, { x, y: top - TH + 4 - h, width: w, height: h });
+        });
       }
     }
     pdf.setTitle((kind === 'rein' ? 'Reinigingsattest ' : 'Verbrandingsattest ') + clean(d.volgnummer || ''));
