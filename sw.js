@@ -1,5 +1,5 @@
 // VET Heat – offline cache. Bij een update: verhoog het versienummer hieronder.
-const V='vh-v7';
+const V='vh-v8';
 const FILES=['./','index.html','attest-engine.js','pdf-lib.min.js','manifest.webmanifest','logo.png','logo-app.png','icon-192.png','icon-512.png','apple-touch-icon.png','schouw-types.js','reinigingsattest.pdf','verbrandingsattest.pdf'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
