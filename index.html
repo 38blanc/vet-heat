@@ -43,7 +43,7 @@ button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:11px 16px
 .mt td:first-child{font-size:14px;line-height:1.2}.mt td:first-child small{display:block;color:var(--mu);font-size:12px}
 .mt input{margin:0;padding:8px 4px;text-align:center;min-width:0}.mt td.v{width:21%}
 .mt tr+tr td{border-top:1px solid var(--bd)}
-.on3{display:flex;gap:6px;margin:2px 0 6px}.on3 button{flex:1;padding:7px 8px;font-size:14px}.on3 .y{background:var(--ok);color:#fff}.on3 .n{background:var(--rd);color:#fff}.on3 button:not(.y):not(.n){background:var(--ac2);color:var(--ac)}
+.on3{display:flex;gap:6px;margin:2px 0 6px}.on3 button{flex:1;padding:7px 8px;font-size:14px}.on3 .y{background:var(--ok);color:#fff}.on3 .n{background:var(--rd);color:#fff}.on3 button:disabled{opacity:1;cursor:default}.on3 button:not(.y):not(.n){background:var(--ac2);color:var(--ac)}
 .chk{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--bd)}.chk>span{flex:1;font-size:14px;min-width:0;overflow-wrap:anywhere}.chk .on3{margin:0;flex:0 0 150px}.chk .on3 button{padding:8px 4px}
 .up{display:inline-block;background:var(--ac2);color:var(--ac);font-weight:600;padding:11px 16px;border-radius:8px;cursor:pointer}
 .warn{background:var(--wa2);color:var(--wa);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px}
@@ -53,7 +53,7 @@ details>summary{cursor:pointer}
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const CFG0={firma:{naam:'Van Eyen Technics',straat:'Ilfeldlaan 34',pc:'2610 Wilrijk',tel:'0479 68 78 92',email:'info@vaneyentechnics.be',kbo:'BE 1034.973.271'},tech:{naam:'Jordy Van Eyen',gv:'GV32528',tv:''},prefix:'VH',int:{gas:2,vloeibaar:1,vast:1},ink:'blauw',lim:{coGas:'',coOlie:'',hiGas:'',hiOlie:'',rook:''}};
+const CFG0={firma:{naam:'Van Eyen Technics',straat:'Ilfeldlaan 34',pc:'2610 Wilrijk',tel:'0479 68 78 92',email:'info@vaneyentechnics.be',kbo:'BE 1034.973.271'},tech:{naam:'Jordy Van Eyen',gv:'GV32528',tv:''},prefix:'VH',int:{gas:2,vloeibaar:1,vast:1},ink:'blauw',lim:{coGas:'150',coOlie:'150',hiGas:'90',hiOlie:'90',rook:''},limV:1};
 let S={jobs:[],clients:[],seq:0,cfg:JSON.parse(JSON.stringify(CFG0)),tsig:'',bk:0};
 let v='list',cur=null,saveT,tab='open',q='',ren=0,pdfK=0;
 const db=new Promise(r=>{try{const x=indexedDB.open('vetheat',1);x.onupgradeneeded=()=>x.result.createObjectStore('kv');x.onsuccess=()=>r(x.result);x.onerror=()=>r(null)}catch(e){r(null)}});
@@ -73,9 +73,9 @@ function go(x,id){ren=0;pdfK=0;v=x;if(id)cur=id;R();scrollTo(0,0)}
 /* ---------- pad-helpers (bv. 'klant.n') ---------- */
 const gv=(p,o=J())=>p.split('.').reduce((a,k)=>a==null?a:a[k],o);
 function setp(o,p,x){const k=p.split('.'),l=k.pop();let t=o;for(const s of k)t=t[s]??=( {} );t[l]=x}
-function set(p,x){setp(J(),p,x);sv()}
+function set(p,x){setp(J(),p,x);upMiss();sv()}
 function tog(p){set(p,!gv(p));R()}
-function pickv(p,x){set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);save();R()}
+function pickv(p,x){if(p=='verb.werkt'&&x=='goed'&&OKR.some(r=>rowsFor(J()).some(y=>y[0]==r)&&auto(r)=='nok'))return alert('Niet mogelijk: CO en/of rendement liggen buiten de grenswaarden.');set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);save();R()}
 const F=(p,lb,type='text',extra='')=>`<label class="f"><span>${lb}</span><input ${type=='num'?'inputmode="decimal"':`type="${type}"`} value="${esc(gv(p))}" oninput="set('${p}',this.value)" ${extra}></label>`;
 const CH=(p,lb)=>`<button class="ck ${gv(p)?'on':''}" onclick="tog('${p}')">${gv(p)?'✓ ':''}${lb}</button>`;
 const SEG=(p,opts)=>`<div class="tg">${opts.map(([x,l])=>`<button class="${gv(p)==x?'on':''}" onclick="pickv('${p}','${x}')">${l}</button>`).join('')}</div>`;
@@ -115,8 +115,17 @@ const cols=j=>['p1'].concat(j.verb.laag?['low']:[]).concat(j.verb.hoog?['high']:
 function setM(r,c,x){const j=J(),m=j.verb.meet;(m[r]??={})[c]=x;
  if(r=='tnet')j.verb.tnetMan[c]=x!=='';
  if((r=='tg'||r=='ta')&&!j.verb.tnetMan[c]){const a=num(m.tg?.[c]),b=num(m.ta?.[c]);const t=isNaN(a)||isNaN(b)?'':fmt(a-b);(m.tnet??={})[c]=t;const e=$('#m_tnet_'+c);if(e)e.value=t}
- upHint(r);sv()}
-function setOK(p,x){const o=J().verb[p.split('.')[0]],k=p.split('.')[1];o[k]=o[k]==x?'':x;save();R()}
+ upHint(r);if(OKR.includes(r)){autoOK(j);upOK()}upMiss();sv()}
+function setOK(p,x){const j=J(),o=j.verb[p.split('.')[0]],k=p.split('.')[1];if(p.startsWith('okNok.')&&auto(k,j))return;o[k]=o[k]==x?'':x;save();R()}
+/* automatische keuring t.o.v. grenswaarden (CO max, rendement min): null = geen grenswaarde of nog geen meting */
+function auto(r,j=J()){const l=limit(r,j);if(!l)return null;const vals=cols(j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return null;
+ return (l.max!=null&&Math.max(...vals)>l.max)||(l.min!=null&&Math.min(...vals)<l.min)?'nok':'ok'}
+function autoOK(j=J()){let bad=0;OKR.forEach(r=>{if(!rowsFor(j).some(x=>x[0]==r))return;const a=auto(r,j);if(a){j.verb.okNok[r]=a;if(a=='nok')bad=1}});if(bad)j.verb.werkt='nietgoed';return bad}
+const OKBTN=(r,j)=>{const a=auto(r,j),v=j.verb.okNok[r];return `<button class="${v=='ok'?'y':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','ok')">OK</button><button class="${v=='nok'?'n':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','nok')">${v=='nok'&&a?'Afgekeurd':'Niet OK'}</button>`};
+const WERKT=j=>`<div id="werkt"><div class="tg" style="margin-bottom:8px">${[['goed','Goed'],['nietgoed','Niet goed']].map(([x,l])=>`<button class="${j.verb.werkt==x?'on':''}" onclick="pickv('verb.werkt','${x}')">${l}</button>`).join('')}</div>${OKR.some(r=>rowsFor(j).some(x=>x[0]==r)&&auto(r,j)=='nok')?'<div class="warn">Afgekeurd: CO boven '+esc(S.cfg.lim.coGas)+' mg/kWh en/of rendement onder '+esc(S.cfg.lim.hiGas)+' %. Eindbeoordeling automatisch op "niet goed".</div>':''}</div>`;
+function upOK(){const j=J();OKR.forEach(r=>{const e=$('#ok_'+r);if(e)e.innerHTML=OKBTN(r,j)});const w=$('#werkt');if(w)w.outerHTML=WERKT(j)}
+const MISS=j=>{const m=missing(j);return m.length?`<div class="c"><h2>Nog in te vullen (${m.length})</h2><ul class="mu" style="margin:0;padding-left:18px">${m.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'<div class="c"><h2 style="color:var(--ok);margin:0">✓ Alles ingevuld</h2></div>'};
+let mT;function upMiss(){clearTimeout(mT);mT=setTimeout(()=>{const e=$('#miss'),j=J();if(e&&j)e.innerHTML=MISS(j)},250)}
 function limit(r,j=J()){const L=S.cfg.lim,o=j.km.brandstof=='vloeibaar';if(r=='co'){const l=num(o?L.coOlie:L.coGas);return isNaN(l)?null:{max:l}}if(r=='hi'){const l=num(o?L.hiOlie:L.hiGas);return isNaN(l)?null:{min:l}}if(r=='rookindex'){const l=num(L.rook);return isNaN(l)?null:{max:l}}return null}
 function hint(r,j=J()){const l=limit(r,j);if(!l)return'';const vals=cols(j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return'';
  if(l.max!=null&&Math.max(...vals)>l.max)return'boven grenswaarde '+fmt(l.max);if(l.min!=null&&Math.min(...vals)<l.min)return'onder grenswaarde '+fmt(l.min);return''}
@@ -164,20 +173,23 @@ function data(j,kind){const c=S.cfg,cs=cols(j),meet={};rowsFor(j).forEach(([r])=
  kenmerken:kmData(j),toestel:j.toestel,brander:j.brander,reiniging:rein,gebreken:j.gebreken,maatregelen:j.maatregelen,opmerkingen:j.opm,volgendeToestel:j.volgT,volgendeKanaal:j.volgK,volgende:j.volgV,
  verbranding:{laaglast:j.verb.laag,hooglast:j.verb.hoog,meet,okNok,checks,drukPa:j.verb.drukPa,werkt:j.verb.werkt,veilig:j.verb.veilig},handtekening:{tech:S.tsig,klant:j.sig},
  bijlagen:kind=='verb'?j.tickets.map((d,i)=>({titel:'Afdruk meettoestel'+(j.tickets.length>1?' '+(i+1):''),data:d})):[]}}
+let LOGO;const logoBytes=async()=>LOGO||(LOGO=await(await fetch('logo.png')).arrayBuffer());
 const TPL={};async function tpl(k){if(!TPL[k])TPL[k]=await(await fetch(VETAttest.MAP[k].file)).arrayBuffer();return TPL[k]}
 const safe=s=>String(s).replace(/[\\/:*?"<>|]/g,'-');
 async function deliver(file){try{if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return 1}}catch(e){if(e.name=='AbortError')return}const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();return 1}
-async function pdf(id,which='beide'){try{const j=id?S.jobs.find(x=>x.id==id):J(),ks=(which=='beide'?['rein','verb']:[which]).filter(k=>j.att[k]);if(!ks.length)return alert('Duid eerst aan welk attest je opmaakt.');
+async function pdf(id,which='beide'){try{const j=id?S.jobs.find(x=>x.id==id):J(),ks=(which=='beide'?['verb','rein']:[which]).filter(k=>j.att[k]);if(!ks.length)return alert('Duid eerst aan welk attest je opmaakt.');
  if(j.km.brandstof=='vloeibaar'&&!S.cfg.tech.tv)return alert('Attesten voor stookolie vereisen een TV-erkenningsnummer (Instellingen).');
- const parts=[];for(const k of ks)parts.push((await VETAttest.fillAttest(k,data(j,k),await tpl(k),{ink:S.cfg.ink})).bytes);
- let bytes=parts[0];if(parts.length>1){const L=PDFLib,out=await L.PDFDocument.create();out.setTitle('Attesten '+j.nr);for(const p of parts){const d=await L.PDFDocument.load(p);(await out.copyPages(d,d.getPageIndices())).forEach(pg=>out.addPage(pg))}bytes=await out.save()}
+ autoOK(j);const parts=[];for(const k of ks)parts.push((await VETAttest.fillAttest(k,data(j,k),await tpl(k),{ink:S.cfg.ink,logo:await logoBytes()})).bytes);
+ let bytes=parts[0];if(parts.length>1){const L=PDFLib,out=await L.PDFDocument.create();out.setTitle('Attesten '+j.nr);const docs=[];for(const p of parts)docs.push(await L.PDFDocument.load(p));
+ /* eerst de attesten zelf (verbranding, reiniging), daarna alle bijlagen; het meetticket staat zo helemaal achteraan */
+ for(const d of docs)out.addPage((await out.copyPages(d,[0]))[0]);for(const d of [...docs].reverse()){const ix=d.getPageIndices().slice(1);if(ix.length)(await out.copyPages(d,ix)).forEach(pg=>out.addPage(pg))}bytes=await out.save()}
  const nm=safe(j.nr)+(ks.length>1?'':ks[0]=='rein'?' Reinigingsattest':' Verbrandingsattest')+'.pdf';await deliver(new File([bytes],nm,{type:'application/pdf'}))}catch(e){alert('PDF maken mislukt: '+e.message)}}
 
 /* ---------- lijsten ---------- */
 const due=j=>[j.att.verb&&j.volgV,j.att.rein&&j.volgT,j.att.rein&&j.volgK].filter(Boolean).sort()[0]||'';
 const days=d=>Math.round((new Date(d)-new Date(today()))/864e5);
 const dueTag=d=>{if(!d)return'';const n=days(d);return n<0?`<span class="tag r">Vervallen ${dt(d)}</span>`:n<=60?`<span class="tag w">Vóór ${dt(d)}</span>`:`<span class="tag">Vóór ${dt(d)}</span>`};
-const atts=j=>[j.att.rein&&'Reiniging',j.att.verb&&'Verbranding'].filter(Boolean).join(' + ');
+const atts=j=>[j.att.verb&&'Verbranding',j.att.rein&&'Reiniging'].filter(Boolean).join(' + ');
 const row=j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · ${dt(j.datum)} · ${atts(j)}</div><div class="mu">${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div class="row">${j.run?'<span class="tag r">Loopt</span>':''}${j.status=='afgewerkt'?`<button class="b2" onclick="event.stopPropagation();pdf('${j.id}')">⬇ PDF</button>`:''}</div></div>`;
 const jobsOf=c=>S.jobs.filter(j=>j.cid==c.id||(!j.cid&&j.klant.n.trim().toLowerCase()==c.n.trim().toLowerCase()));
 function follow(){return S.clients.map(c=>{const h=jobsOf(c).filter(j=>j.status=='afgewerkt').sort((a,b)=>b.datum.localeCompare(a.datum));return h[0]?{c,j:h[0],d:due(h[0])}:null}).filter(x=>x&&x.d).sort((a,b)=>a.d.localeCompare(b.d))}
@@ -228,7 +240,7 @@ function VS(){const c=S.cfg;return `<div class="top"><h1>Instellingen</h1><butto
 <div class="c"><h2>Firma (op het attest)</h2>${FC('firma.naam','Naam')}${FC('firma.straat','Straat en nummer')}${FC('firma.pc','Postnummer en gemeente')}<div class="g2 s1">${FC('firma.tel','Telefoon','tel')}${FC('firma.email','E-mail','email')}</div>${FC('firma.kbo','Ondernemingsnummer')}</div>
 <div class="c"><h2>Volgnummer attest</h2><div class="g2">${FC('prefix','Voorvoegsel')}<label class="f"><span>Laatst gebruikt nummer</span><input inputmode="numeric" value="${S.seq}" oninput="S.seq=Math.max(0,parseInt(this.value)||0);sv()"></label></div><p class="mu" style="margin:0">Voorbeeld volgend nummer: ${esc(c.prefix||'VH')}-${new Date().getFullYear()}-${String(S.seq+1).padStart(4,'0')}. Reinigings- en verbrandingsattest van hetzelfde onderhoud krijgen hetzelfde nummer.</p></div>
 <div class="c"><h2>Volgende onderhoud voorstellen na</h2><div class="g3">${FC('int.gas','Gas (jaar)','num')}${FC('int.vloeibaar','Stookolie (jaar)','num')}${FC('int.vast','Vaste brandstof (jaar)','num')}</div><p class="mu" style="margin:0">Voor toestellen vanaf 20 kW: gas om de 2 jaar, stookolie elk jaar. Je kunt de datum altijd aanpassen op het onderhoud.</p></div>
-<div class="c"><h2>Grenswaarden (optioneel)</h2><p class="mu">Vul je zelf in uit de geldende regelgeving of fabrikantgegevens. De app toont dan een waarschuwing als een meting erbuiten valt. OK of Niet OK duid je altijd zelf aan.</p>
+<div class="c"><h2>Grenswaarden</h2><p class="mu">Valt een gemeten waarde (Proef I, laaglast of hooglast) buiten deze grenzen, dan zet de app die rij automatisch op Niet OK (afgekeurd) en de eindbeoordeling op "niet goed". Binnen de grenzen wordt de rij automatisch OK. Laat een veld leeg om dit uit te schakelen.</p>
 <div class="g2">${FC('lim.coGas','CO max gas (mg/kWh)','num')}${FC('lim.coOlie','CO max stookolie (mg/kWh)','num')}${FC('lim.hiGas','Rendement Hi min gas (%)','num')}${FC('lim.hiOlie','Rendement Hi min stookolie (%)','num')}${FC('lim.rook','Rookindex max (Bacharach)','num')}</div></div>
 <div class="c"><h2>Inktkleur op het attest</h2><div class="tg"><button class="${c.ink!='zwart'?'on':''}" onclick="S.cfg.ink='blauw';save();R()">Blauw</button><button class="${c.ink=='zwart'?'on':''}" onclick="S.cfg.ink='zwart';save();R()">Zwart</button></div></div>
 <div class="c"><h2>Back-up</h2><p class="mu">Je gegevens staan enkel op dit toestel. Maak regelmatig een back-up: je moet een kopie van elk attest minstens 1 jaar bewaren.${S.bk?' Laatste: '+dt(S.bk)+'.':''}</p><div class="row wrap"><button onclick="backup()">Back-up maken</button><label class="b2" style="padding:11px 16px;border-radius:8px;font-weight:600;cursor:pointer">Terugzetten<input type="file" accept=".json,application/json" hidden onchange="imp(this)"></label></div>
@@ -242,7 +254,7 @@ function VJ(){const j=J(),done=j.status=='afgewerkt',b=j.km.brandstof,f=fuel(j),
  return `<div class="top"><button class="b2" onclick="go('list')">← Terug</button><span class="tag ${done?'d':''}">${done?'Afgewerkt':'Open'}</span></div>
 ${ren?`<div class="row" style="margin:6px 0 12px"><input id="rnm" value="${esc(j.nr)}" onkeydown="if(event.key=='Enter')saveRn()"><button onclick="saveRn()">Opslaan</button><button class="b2" onclick="ren=0;R()">✕</button></div>`:`<h1>${esc(j.nr)} <button class="b2" style="padding:2px 9px;font-size:15px;vertical-align:middle" onclick="ren=1;R();$('#rnm').focus()">✎</button></h1>`}<div class="mu" style="margin:-8px 0 12px">Volgnummer attest</div>
 
-<div class="c"><h2>Attesten</h2><div class="cks">${CH('att.rein','Reinigingsattest')}${CH('att.verb','Verbrandingsattest')}</div></div>
+<div class="c"><h2>Attesten</h2><div class="cks">${CH('att.verb','Verbrandingsattest')}${CH('att.rein','Reinigingsattest')}</div></div>
 
 <div class="c"><h2>Klant</h2>
 <label class="f"><span>Voornaam en achternaam</span><input list="kl" value="${esc(j.klant.n)}" oninput="set('klant.n',this.value)" onchange="pickClient(this.value)"></label><datalist id="kl">${S.clients.map(c=>`<option value="${esc(c.n)}">`).join('')}</datalist>
@@ -281,9 +293,9 @@ ${!b?'<p class="mu" style="margin-top:12px">Kies eerst de brandstof: dan verschi
 ${rs.length?`<div class="cks" style="margin-bottom:8px">${CH('verb.laag','Proef II laaglast')}${CH('verb.hoog','Proef II hooglast')}</div>
 <table class="mt"><tr><th></th><th>Proef I</th>${j.verb.laag?'<th>Laag</th>':''}${j.verb.hoog?'<th>Hoog</th>':''}</tr>
 ${rs.map(([r,lb,u,,t])=>`<tr><td>${lb}<small>${u}${OKR.includes(r)?` <span class="hint" id="h_${r}">${hint(r,j)}</span>`:''}</small></td>${cs.map(c=>`<td class="v"><input id="m_${r}_${c}" ${t?'':'inputmode="decimal"'} value="${esc(j.verb.meet[r]?.[c]??'')}" oninput="setM('${r}','${c}',this.value)"></td>`).join('')}</tr>
-${OKR.includes(r)?`<tr class="nb"><td colspan="${cs.length+1}" style="border-top:0;padding-top:0"><div class="on3"><button class="${j.verb.okNok[r]=='ok'?'y':''}" onclick="setOK('okNok.${r}','ok')">OK</button><button class="${j.verb.okNok[r]=='nok'?'n':''}" onclick="setOK('okNok.${r}','nok')">Niet OK</button></div></td></tr>`:''}`).join('')}</table>`:'<p class="mu">Voor vaste brandstof staan geen meetwaarden op het attest.</p>'}
+${OKR.includes(r)?`<tr class="nb"><td colspan="${cs.length+1}" style="border-top:0;padding-top:0"><div class="on3" id="ok_${r}">${OKBTN(r,j)}</div></td></tr>`:''}`).join('')}</table>`:'<p class="mu">Voor vaste brandstof staan geen meetwaarden op het attest.</p>'}
 <h3>Controles</h3>${chkFor(j).map(([k,lb])=>`<div class="chk"><span>${lb}${k=='drukRga'?`<input inputmode="decimal" placeholder="Pa" style="width:90px;margin:6px 0 0;display:block" value="${esc(j.verb.drukPa)}" oninput="set('verb.drukPa',this.value)">`:''}</span><div class="on3"><button class="${j.verb.checks[k]=='ok'?'y':''}" onclick="setOK('checks.${k}','ok')">OK</button><button class="${j.verb.checks[k]=='nok'?'n':''}" onclick="setOK('checks.${k}','nok')">Niet OK</button></div></div>`).join('')}
-<h3>Eindbeoordeling – het stooktoestel werkt</h3><div class="tg" style="margin-bottom:8px">${[['goed','Goed'],['nietgoed','Niet goed']].map(([x,l])=>`<button class="${j.verb.werkt==x?'on':''}" onclick="pickv('verb.werkt','${x}')">${l}</button>`).join('')}</div>
+<h3>Eindbeoordeling – het stooktoestel werkt</h3>${WERKT(j)}
 <div class="tg">${[['veilig','Veilig'],['nietveilig','Niet veilig']].map(([x,l])=>`<button class="${j.verb.veilig==x?'on':''}" onclick="pickv('verb.veilig','${x}')">${l}</button>`).join('')}</div>
 ${j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig'?'<div class="warn" style="margin-top:10px">Gebreken moeten binnen 3 maanden hersteld worden, met een nieuw attest als bewijs. Vul de gebreken hieronder in en laat de klant tekenen.</div>':''}
 <h3>Eerstvolgende verbrandingscontrole vóór</h3>${F('volgV','Datum','date')}
@@ -299,10 +311,10 @@ ${j.att.rein?`<label class="f"><span>Te treffen maatregelen om deze gebreken weg
 
 <div class="c"><h2>Handtekening klant – voor kennisname</h2>${!S.tsig?'<div class="warn">Je eigen handtekening ontbreekt nog: stel ze in bij Instellingen.</div>':''}<canvas id="sg"></canvas><button class="b2" style="margin-top:8px" onclick="clrSig()">Wissen</button></div>
 
-${miss.length?`<div class="c"><h2>Nog in te vullen (${miss.length})</h2><ul class="mu" style="margin:0;padding-left:18px">${miss.map(m=>`<li>${esc(m)}</li>`).join('')}</ul></div>`:'<div class="c"><h2 style="color:var(--ok);margin:0">✓ Alles ingevuld</h2></div>'}
+<div id="miss">${MISS(j)}</div>
 
 <div class="row wrap" style="margin-bottom:12px">${done?'<button class="b2" onclick="reopen()">Heropenen</button>':'<button class="ok" onclick="fin()">Onderhoud afronden</button>'}${j.att.rein&&j.att.verb?`<button onclick="pdfK=!pdfK;R();scrollTo(0,document.body.scrollHeight)">PDF ▾</button>`:`<button onclick="pdf()">Exporteer als pdf</button>`}<button class="red" onclick="delJ()">Verwijderen</button></div>
-${pdfK?`<div class="c"><h2>PDF exporteren</h2><div class="row wrap"><button onclick="pdf(0,'beide')">Beide attesten</button><button class="b2" onclick="pdf(0,'rein')">Reinigingsattest</button><button class="b2" onclick="pdf(0,'verb')">Verbrandingsattest</button></div></div>`:''}<div style="height:24px"></div>`}
+${pdfK?`<div class="c"><h2>PDF exporteren</h2><div class="row wrap"><button onclick="pdf(0,'beide')">Beide attesten</button><button class="b2" onclick="pdf(0,'verb')">Verbrandingsattest</button><button class="b2" onclick="pdf(0,'rein')">Reinigingsattest</button></div></div>`:''}<div style="height:24px"></div>`}
 
 /* ---------- handtekening ---------- */
 function initSig(id,get,set_){const c=$('#'+id);if(!c)return;const d=devicePixelRatio||1,w=c.clientWidth,h=220;c.width=w*d;c.height=h*d;const x=c.getContext('2d');x.scale(d,d);x.lineWidth=2.4;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#111';
@@ -313,11 +325,11 @@ function initSig(id,get,set_){const c=$('#'+id);if(!c)return;const d=devicePixel
  c.onpointermove=e=>{if(dr){x.lineTo(...p(e));x.stroke()}};
  c.onpointerup=c.onpointercancel=()=>{if(dr){dr=0;set_(c.toDataURL('image/png'));tm=setTimeout(lock,1200)}}}
 function clrSig(){J().sig='';J().sigT=0;save();sigO()}
-const sigO=()=>initSig('sg',()=>J().sig,x=>{J().sig=x;J().sigT=Date.now();sv()});
+const sigO=()=>initSig('sg',()=>J().sig,x=>{J().sig=x;J().sigT=Date.now();upMiss();sv()});
 const sigT=()=>initSig('sg2',()=>S.tsig,x=>{S.tsig=x;sv()});
 
 function R(){$('#app').innerHTML=v=='list'?VL():v=='set'?VS():v=='cd'?VC():VJ();if(v=='job')sigO();if(v=='set')sigT()}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 navigator.storage?.persist?.();
-load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});R()});
+load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});if(!S.cfg.limV){S.cfg.lim=Object.assign({},S.cfg.lim,{coGas:'150',coOlie:'150',hiGas:'90',hiOlie:'90'});S.cfg.limV=1;save()}R()});
 </script></body></html>

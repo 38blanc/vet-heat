@@ -48,6 +48,7 @@
       },
       volgendeToestel: D([[347.1, 390.9], [393.4, 437.2], [439.6, 507.4]], 682.0),
       volgendeKanaal: D([[347.1, 396.4], [399.1, 448.4], [451.2, 527.4]], 692.0),
+      logo: { x: 232, top: 37, w: 50, h: 40 },
       sigTech: { x: 32, top: 703, w: 240, h: 31 },
       sigKlant: { x: 352, top: 704, w: 200, h: 30 }
     },
@@ -91,6 +92,7 @@
         gebreken: { x: 275, top: 709.3, max: 572, lines: 2, lh: 9, firstX: 275, nextX: 31 },
         opmerkingen: { x: 104, top: 728.3, max: 572, lines: 3, lh: 9, firstX: 104, nextX: 31 }
       },
+      logo: { x: 232, top: 37.5, w: 46, h: 36 },
       sigTech: { x: 33, top: 756, w: 290, h: 27 },
       sigKlant: { x: 402, top: 754, w: 170, h: 29 }
     }
@@ -175,8 +177,9 @@
     };
     const image = async (box, dataUrl) => {
       if (!box || !dataUrl) return;
-      const bytes = typeof dataUrl === 'string' ? b64ToBytes(dataUrl.split(',')[1]) : dataUrl;
-      const img = /^data:image\/jpe?g/.test(dataUrl) ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+      const isStr = typeof dataUrl === 'string';
+      const bytes = isStr ? b64ToBytes(dataUrl.split(',')[1]) : dataUrl;
+      const img = isStr && /^data:image\/jpe?g/.test(dataUrl) ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
       const sc = Math.min(box.w / img.width, box.h / img.height);
       const w = img.width * sc, h = img.height * sc;
       page.drawImage(img, { x: box.x + (box.w - w) / 2, y: H - box.top - box.h + (box.h - h) / 2, width: w, height: h });
@@ -250,6 +253,8 @@
       if (!area(M.vrij.gebreken, d.gebreken)) warnings.push('gebreken');
       if (!area(M.vrij.opmerkingen, d.opmerkingen)) warnings.push('opmerkingen');
     }
+    // bedrijfslogo klein in het firmavak
+    if (opts.logo) await image(M.logo, opts.logo);
     // handtekeningen
     await image(M.sigTech, (d.handtekening || {}).tech);
     await image(M.sigKlant, (d.handtekening || {}).klant);
