@@ -78,7 +78,7 @@ function setp(o,p,x){const k=p.split('.'),l=k.pop();let t=o;for(const s of k)t=t
 function set(p,x){setp(J(),p,x);upMiss();sv()}
 function tog(p){set(p,!gv(p));R()}
 function pickCode(c){const j=J();j.km.code=c;j.km.aansl=c[0];save();R()}
-function pickv(p,x){if(p=='verb.werkt'&&x=='goed'&&rejWhy(J()).length)return alert('Niet mogelijk – afgekeurd: '+rejWhy(J()).join(', ')+'.');set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);if(p=='km.aansl')autoOK();if(p.startsWith('verb.'))rejDate();save();R()}
+function pickv(p,x){if(p=='verb.werkt')J().verb.autoAfk=0;if(p=='verb.werkt'&&x=='goed'&&rejWhy(J()).length)return alert('Niet mogelijk – afgekeurd: '+rejWhy(J()).join(', ')+'.');set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);if(p=='km.aansl')autoOK();if(p.startsWith('verb.'))rejDate();save();R()}
 const F=(p,lb,type='text',extra='')=>`<label class="f"><span>${lb}</span><input ${type=='num'?'inputmode="decimal"':`type="${type}"`} value="${esc(gv(p))}" oninput="set('${p}',this.value)" ${extra}></label>`;
 const CH=(p,lb)=>`<button class="ck ${gv(p)?'on':''}" onclick="tog('${p}')">${gv(p)?'✓ ':''}${lb}</button>`;
 const SEG=(p,opts)=>`<div class="tg">${opts.map(([x,l])=>`<button class="${gv(p)==x?'on':''}" onclick="pickv('${p}','${x}')">${l}</button>`).join('')}</div>`;
@@ -135,7 +135,9 @@ function auto(r,j=J()){const l=limit(r,j);if(!l)return null;const vals=cols(j).m
  return (l.max!=null&&Math.max(...vals)>l.max)||(l.min!=null&&Math.min(...vals)<l.min)?'nok':'ok'}
 /* type B: trek in het rookgasafvoerkanaal moet minstens 3 Pa onderdruk zijn; een waarde boven -3 Pa (bv. -2, 0 of +1) = afgekeurd */
 function autoDruk(j=J()){const l=num(S.cfg.lim.trekB),v=num(j.verb.drukPa);if(j.km.aansl!='B'||isNaN(l)||isNaN(v)||!chkFor(j).some(x=>x[0]=='drukRga'))return null;return v>l?'nok':'ok'}
-function autoOK(j=J()){let bad=0;const d=autoDruk(j);if(d){j.verb.checks.drukRga=d;if(d=='nok')bad=1}OKR.forEach(r=>{if(!rowsFor(j).some(x=>x[0]==r))return;const a=auto(r,j);if(a){j.verb.okNok[r]=a;if(a=='nok')bad=1}});if(bad)j.verb.werkt='nietgoed';rejDate(j);return bad}
+function autoOK(j=J()){let bad=0;const d=autoDruk(j);if(d){j.verb.checks.drukRga=d;if(d=='nok')bad=1}OKR.forEach(r=>{if(!rowsFor(j).some(x=>x[0]==r))return;const a=auto(r,j);if(a){j.verb.okNok[r]=a;if(a=='nok')bad=1}});/* automatisch afgekeurd => 'niet goed'; zodra alle waarden terug in orde zijn => vorige keuze terug (en dus ook de normale datum) */
+ const v=j.verb;if(bad){if(!v.autoAfk){v.werktPrev=v.werkt;v.autoAfk=1}v.werkt='nietgoed'}else if(v.autoAfk){v.autoAfk=0;v.werkt=v.werktPrev=='nietgoed'?'nietgoed':(v.werktPrev||'goed')}
+ rejDate(j);return bad}
 const OKBTN=(r,j)=>{const a=auto(r,j),v=j.verb.okNok[r];return `<button class="${v=='ok'?'y':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','ok')">OK</button><button class="${v=='nok'?'n':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','nok')">${v=='nok'&&a?'Afgekeurd':'Niet OK'}</button>`};
 const WERKT=j=>`<div id="werkt"><div class="tg" style="margin-bottom:8px">${[['goed','Goed'],['nietgoed','Niet goed']].map(([x,l])=>`<button class="${j.verb.werkt==x?'on':''}" onclick="pickv('verb.werkt','${x}')">${l}</button>`).join('')}</div>${rejWhy(j).length?'<div class="warn">Afgekeurd: '+rejWhy(j).join(', ')+'. Eindbeoordeling automatisch op "niet goed".</div>':''}</div>`;
 const rejWhy=j=>{const L=S.cfg.lim,w=[];if(rowsFor(j).some(x=>x[0]=='co')&&auto('co',j)=='nok')w.push('CO boven '+esc(L.co)+' mg/kWh');if(rowsFor(j).some(x=>x[0]=='hi')&&auto('hi',j)=='nok')w.push('rendement onder '+esc(j.km.aansl=='B'?L.hiB:L.hiC)+' % (type '+j.km.aansl+')');if(rowsFor(j).some(x=>x[0]=='rookindex')&&auto('rookindex',j)=='nok')w.push('rookindex te hoog');if(autoDruk(j)=='nok')w.push('trek type B onvoldoende (boven '+esc(L.trekB)+' Pa)');return w};
@@ -181,6 +183,13 @@ async function addPh(inp,k){const tk=k.startsWith('tick');for(const f of inp.fil
 function rmPh(k,i){J()[k].splice(i,1);save();R()}
 /* twee knoppen: camera rechtstreeks openen, of kiezen uit de galerij */
 const UP=k=>`<div class="row wrap"><label class="up">📷 Camera<input type="file" accept="image/*" capture="environment" hidden onchange="addPh(this,'${k}')"></label><label class="up">🖼 Galerij<input type="file" accept="image/*" multiple hidden onchange="addPh(this,'${k}')"></label></div>`;
+/* meetwaarden: enkel cijfers en één komma (punt wordt komma); min-teken enkel vooraan waar nodig (trek in Pa, luchttemperatuur) */
+function numOnly(el,neg){const o=el.value;let v=o.replace(/\./g,',').replace(neg?/[^0-9,\-]/g:/[^0-9,]/g,'');
+ if(neg){const m=v.startsWith('-');v=(m?'-':'')+v.replace(/-/g,'')}const i=v.indexOf(',');if(i>-1)v=v.slice(0,i+1)+v.slice(i+1).replace(/,/g,'');
+ if(v!==o){const p=el.selectionStart-(o.length-v.length);el.value=v;try{el.setSelectionRange(p,p)}catch(e){}}}
+/* velden met min-teken: toetsenbord met cijfers én symbolen (iPhone-cijferblok heeft geen min-teken) */
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform=='MacIntel'&&navigator.maxTouchPoints>1);
+const KBNEG=IOS?'inputmode="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"':'inputmode="decimal"';
 const PH=k=>`<div class="ph">${J()[k].map((f,i)=>`<div><img src="${f}" alt="Foto ${i+1}"><button onclick="rmPh('${k}',${i})">✕</button></div>`).join('')}</div>`;
 
 /* ---------- pdf ---------- */
@@ -314,9 +323,9 @@ ${!b?'<p class="mu" style="margin-top:12px">Kies eerst de brandstof: dan verschi
 <h3>Goede staat van werking</h3><p class="mu" style="margin:-4px 0 8px">Proef I = initiële meting. Proef II = eindmeting: duid aan welke meetreeksen.</p>
 ${rs.length?`<div class="cks" style="margin-bottom:8px">${CH('verb.laag','Proef II laaglast')}${CH('verb.hoog','Proef II hooglast')}</div>
 <table class="mt"><tr><th></th><th>Proef I</th>${j.verb.laag?'<th>Laag</th>':''}${j.verb.hoog?'<th>Hoog</th>':''}</tr>
-${rs.map(([r,lb,u,,t])=>`<tr><td>${lb}<small>${u}${r=='gasTeller'?'<br><span style="color:var(--ac)">'+gasHint(j)+'</span>':''}${OKR.includes(r)?` <span class="hint" id="h_${r}">${hint(r,j)}</span>`:''}</small></td>${cs.map(c=>`<td class="v"><input id="m_${r}_${c}" ${t?'':'inputmode="decimal"'} value="${esc(j.verb.meet[r]?.[c]??'')}" oninput="setM('${r}','${c}',this.value)"></td>`).join('')}</tr>
+${rs.map(([r,lb,u,,t])=>`<tr><td>${lb}<small>${u}${r=='gasTeller'?'<br><span style="color:var(--ac)">'+gasHint(j)+'</span>':''}${OKR.includes(r)?` <span class="hint" id="h_${r}">${hint(r,j)}</span>`:''}</small></td>${cs.map(c=>`<td class="v"><input id="m_${r}_${c}" ${t?'':r=='ta'?KBNEG:'inputmode="decimal"'} value="${esc(j.verb.meet[r]?.[c]??'')}" oninput="${t?'':'numOnly(this,'+(r=='ta'?1:0)+');'}setM('${r}','${c}',this.value)"></td>`).join('')}</tr>
 ${OKR.includes(r)?`<tr class="nb"><td colspan="${cs.length+1}" style="border-top:0;padding-top:0"><div class="on3" id="ok_${r}">${OKBTN(r,j)}</div></td></tr>`:''}`).join('')}</table>`:'<p class="mu">Voor vaste brandstof staan geen meetwaarden op het attest.</p>'}
-<h3>Controles</h3>${chkFor(j).map(([k,lb])=>`<div class="chk"><span>${lb}${k=='drukRga'?`<input inputmode="decimal" placeholder="Pa" style="width:90px;margin:6px 0 0;display:block" value="${esc(j.verb.drukPa)}" oninput="setDruk(this.value)">${j.km.aansl=='B'?'<small class="mu" style="display:block">Type B: min. 3 Pa trek (onderdruk), bv. -5. Boven '+esc(S.cfg.lim.trekB)+' Pa = afgekeurd.</small>':''}`:''}</span><div class="on3" id="chk_${k}">${CHKBTN(k,j)}</div></div>`).join('')}
+<h3>Controles</h3>${chkFor(j).map(([k,lb])=>`<div class="chk"><span>${lb}${k=='drukRga'?`<input id="drukPa" ${KBNEG} placeholder="bv. -5" style="width:110px;margin:6px 0 0;display:block" value="${esc(j.verb.drukPa)}" oninput="numOnly(this,1);setDruk(this.value)">${j.km.aansl=='B'?'<small class="mu" style="display:block">Type B: min. 3 Pa trek (onderdruk), bv. -5. Boven '+esc(S.cfg.lim.trekB)+' Pa = afgekeurd.</small>':''}`:''}</span><div class="on3" id="chk_${k}">${CHKBTN(k,j)}</div></div>`).join('')}
 <h3>Eindbeoordeling – het stooktoestel werkt</h3>${WERKT(j)}
 <div class="tg">${[['veilig','Veilig'],['nietveilig','Niet veilig']].map(([x,l])=>`<button class="${j.verb.veilig==x?'on':''}" onclick="pickv('verb.veilig','${x}')">${l}</button>`).join('')}</div>
 ${j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig'?'<div class="warn" style="margin-top:10px">Gebreken moeten binnen 3 maanden hersteld worden, met een nieuw attest als bewijs. De volgende verbrandingscontrole is automatisch op +3 maanden gezet. Vul de gebreken hieronder in en laat de klant tekenen.</div>':''}
@@ -353,7 +362,9 @@ const sigO=()=>initSig('sg',()=>J().sig,x=>{J().sig=x;J().sigT=Date.now();upMiss
 const sigT=()=>initSig('sg2',()=>S.tsig,x=>{S.tsig=x;sv()});
 
 function R(){$('#app').innerHTML=v=='list'?VL():v=='set'?VS():v=='cd'?VC():VJ();if(v=='job')sigO();if(v=='set')sigT()}
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator){const had=!!navigator.serviceWorker.controller;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
+ /* nieuwe versie actief: één keer herladen zodat je meteen de laatste versie gebruikt */
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!window._rl){window._rl=1;location.reload()}})}
 navigator.storage?.persist?.();
 load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.jobs.forEach(j=>{if(j.tickets){j.tickP1=(j.tickP1||[]).concat(j.tickets);delete j.tickets}j.tickP1=j.tickP1||[];j.tickP2=j.tickP2||[]});S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});if((S.cfg.limV||0)<2){S.cfg.lim={co:'150',hiB:'88',hiC:'90',trekB:'-3',rook:S.cfg.lim?.rook||''};S.cfg.limV=2;save()}R()});
 </script></body></html>

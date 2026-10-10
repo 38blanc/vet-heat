@@ -1,7 +1,8 @@
-// VET Heat – offline cache. Bij een update: verhoog het versienummer hieronder.
-const V='vh-v8';
-const FILES=['./','index.html','attest-engine.js','pdf-lib.min.js','manifest.webmanifest','logo.png','logo-app.png','icon-192.png','icon-512.png','apple-touch-icon.png','schouw-types.js','reinigingsattest.pdf','verbrandingsattest.pdf'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
+// VET Heat – offline cache. Netwerk eerst (altijd de nieuwste versie als er internet is), cache als terugval offline.
+const V='vh-v12';
+const FILES=['./','index.html','attest-engine.js','schouw-types.js','pdf-lib.min.js','manifest.webmanifest','logo.png','logo-app.png','icon-192.png','icon-512.png','apple-touch-icon.png','reinigingsattest.pdf','verbrandingsattest.pdf'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:'reload'})))).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;
- e.respondWith(caches.match(e.request,{ignoreSearch:true}).then(hit=>{const net=fetch(e.request).then(r=>{if(r&&r.ok&&new URL(e.request.url).origin===location.origin){const cp=r.clone();caches.open(V).then(c=>c.put(e.request,cp))}return r}).catch(()=>hit);return hit||net}))});
+self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin)return;
+ e.respondWith(fetch(e.request,{cache:'no-cache'}).then(r=>{if(r&&r.ok){const cp=r.clone();caches.open(V).then(c=>c.put(e.request,cp))}return r})
+  .catch(()=>caches.match(e.request,{ignoreSearch:true}).then(h=>h||caches.match('index.html'))))});
