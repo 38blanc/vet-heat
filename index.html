@@ -31,7 +31,7 @@ button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:11px 16px
 .ph button{position:absolute;top:4px;right:4px;padding:2px 9px;background:rgba(0,0,0,.65)}
 #sg,#sg2{width:100%;height:220px;background:#fff;border:1px dashed var(--mu);border-radius:8px;touch-action:none;display:block}
 .lg{height:46px;display:block;margin-bottom:6px}.tg{display:flex;gap:8px;flex-wrap:wrap}.tg button{flex:1;min-width:max-content;padding:10px 12px}.tg .on{background:var(--ac);color:#fff}.tg button:not(.on){background:var(--ac2);color:var(--ac)}
-.tabs{flex-wrap:nowrap;gap:6px}.tabs button{flex:1 1 0;min-width:0;padding:10px 2px;font-size:14px;white-space:nowrap}
+.tabs{flex-wrap:nowrap;gap:6px}.tabs button{flex:1 1 0;min-width:0;padding:10px 1px;font-size:12.5px;letter-spacing:-.01em;white-space:nowrap}
 .lk{pointer-events:none;border-style:solid!important}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .lg{filter:brightness(1.8)}}:root[data-theme="dark"] .lg{filter:brightness(1.8)}
 .f{display:block}.f>span{display:block;font-size:13px;color:var(--mu);margin:0 0 3px 2px}
@@ -56,7 +56,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const CFG0={firma:{naam:'Van Eyen Technics',straat:'Ilfeldlaan 34',pc:'2610 Wilrijk',tel:'0479 68 78 92',email:'info@vaneyentechnics.be',kbo:'BE 1034.973.271'},tech:{naam:'Jordy Van Eyen',gv:'GV32528',tv:''},prefix:'VH',int:{gas:2,vloeibaar:1,vast:1},ink:'blauw',lim:{co:'150',hiB:'88',hiC:'90',trekB:'-3',rook:''},limV:2};
 let S={jobs:[],clients:[],seq:0,cfg:JSON.parse(JSON.stringify(CFG0)),tsig:'',bk:0};
-let v='list',cur=null,saveT,tab='open',q='',ren=0,pdfK=0;
+let v='list',cur=null,saveT,tab='open',q='',ren=0,pdfK=0,vsub='te';
 const db=new Promise(r=>{try{const x=indexedDB.open('vetheat',1);x.onupgradeneeded=()=>x.result.createObjectStore('kv');x.onsuccess=()=>r(x.result);x.onerror=()=>r(null)}catch(e){r(null)}});
 async function load(){const d=await db;if(!d){try{const x=localStorage.getItem('vetheat');if(x)S=JSON.parse(x)}catch(e){}return}
  return new Promise(r=>{const x=d.transaction('kv').objectStore('kv').get('s');x.onsuccess=()=>{if(x.result)S=x.result;r()};x.onerror=()=>r()})}
@@ -272,7 +272,7 @@ function cpAll(el){cp(vekaFields(J()).map(([a,b])=>a+': '+b).join('\n'),el)}
 function vekaSet(ok){const j=J();j.veka={ok,d:ok?today():''};save();R()}
 const VEKA=j=>{if(j.status!='afgewerkt')return'';const ok=j.veka&&j.veka.ok,n=vekaLeft(j);
  return `<div class="c" id="veka"><div class="top"><h2 style="margin:0">Melding bij VEKA</h2>${vekaTag(j)}</div>
-${ok?`<p style="margin:10px 0">✓ Gemeld op ${dt(j.veka.d)}.</p><button class="b2" onclick="vekaSet(false)">Ongedaan maken</button>`:`
+${ok?`<p style="margin:10px 0">✓ Gemeld op ${dt(j.veka.d)}.</p><button class="b2" onclick="if(confirm('Deze melding terug op \'niet gemeld\' zetten?'))vekaSet(false)">Toch niet gemeld</button>`:`
 <p class="mu" style="margin:8px 0">Verplicht binnen 30 dagen na het onderhoud (uiterlijk ${dt(new Date(new Date(j.datum).getTime()+30*864e5))}). Tik op een waarde om ze te kopiëren en plak ze in het VEKA-formulier.</p>
 <div class="row wrap" style="margin-bottom:10px"><a class="up" style="text-decoration:none;background:var(--ac);color:#fff" href="${VEKA_URL}" target="_blank" rel="noopener">Open VEKA-melding ↗</a><button class="b2" onclick="cpAll(this)">Kopieer alles</button></div>
 ${vekaFields(j).map(([a,b])=>`<div class="chk" style="cursor:pointer" onclick="cp(${esc(JSON.stringify(b))},this.querySelector('b'))"><span class="mu" style="flex:0 0 40%">${a}</span><b style="font-weight:600;text-align:right;flex:1;overflow-wrap:anywhere">${esc(b)}</b></div>`).join('')}
@@ -290,7 +290,11 @@ function follow(){return S.clients.map(c=>{const h=jobsOf(c).filter(j=>j.status=
 function LST(){const k=q.trim().toLowerCase();
  if(tab=='kl'){const a=S.clients.filter(c=>!k||[c.n,c.straat,c.pc,c.tel,c.mail,c.inst?.toestel?.merk].join(' ').toLowerCase().includes(k)).sort((a,b)=>a.n.localeCompare(b.n));return a.map(c=>`<div class="item" onclick="go('cd','${c.id}')"><div><b>${esc(c.n)||'Zonder naam'}</b><div class="mu">${esc([c.straat,c.pc].filter(Boolean).join(', '))}</div></div><span class="tag">${jobsOf(c).length} onderhoud(en)</span></div>`).join('')||'<p class="mu">Nog geen klanten. Ze worden automatisch bewaard (met hun toestel) zodra je een onderhoud afrondt.</p>'}
  if(tab=='op'){const a=follow().filter(x=>!k||[x.c.n,x.c.straat,x.c.pc].join(' ').toLowerCase().includes(k));return a.map(({c,j,d})=>`<div class="item" onclick="go('cd','${c.id}')"><div><b>${esc(c.n)}</b><div class="mu">${esc([c.straat,c.pc].filter(Boolean).join(', '))}</div><div class="mu">Laatste onderhoud ${dt(j.datum)} · ${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div style="text-align:right">${dueTag(d)}<br><button class="b2" style="margin-top:6px;padding:6px 10px;white-space:nowrap" onclick="event.stopPropagation();newJ('${c.id}')">+ Onderhoud</button></div></div>`).join('')||'<p class="mu">Nog niets op te volgen. Afgeronde onderhouden met een volgende datum verschijnen hier.</p>'}
- if(tab=='veka'){const a=S.jobs.filter(vekaOpen).sort((a,b)=>a.datum.localeCompare(b.datum));return a.map(row).join('')||'<p class="mu">Alles is gemeld bij VEKA. ✓</p>'}
+ if(tab=='veka'){const hit=j=>!k||[j.nr,j.klant.n,j.klant.straat,j.klant.pc,dt(j.datum)].join(' ').toLowerCase().includes(k);
+  if(vsub=='ok'){const a=S.jobs.filter(j=>j.status=='afgewerkt'&&j.veka&&j.veka.ok&&hit(j)).sort((a,b)=>(b.veka.d+b.datum).localeCompare(a.veka.d+a.datum));
+   return a.map(j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · onderhoud ${dt(j.datum)}</div><div class="mu">${esc([j.klant.straat,j.klant.pc].filter(Boolean).join(', '))}</div></div><span class="tag d">Gemeld ${dt(j.veka.d)}</span></div>`).join('')||'<p class="mu">Nog niets gemeld.</p>'}
+  const a=S.jobs.filter(j=>vekaOpen(j)&&hit(j)).sort((a,b)=>a.datum.localeCompare(b.datum));
+  return a.map(j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · onderhoud ${dt(j.datum)}</div><div class="mu">${esc([j.klant.straat,j.klant.pc].filter(Boolean).join(', '))}</div></div>${vekaTag(j)}</div>`).join('')||'<p class="mu">Alles is gemeld bij VEKA. ✓</p>'}
  if(tab=='open'){const a=S.jobs.filter(j=>j.status!='afgewerkt');return a.map(row).join('')||'<p class="mu">Geen open onderhouden.</p>'}
  const a=S.jobs.filter(j=>j.status=='afgewerkt'&&(!k||[j.nr,j.klant.n,j.klant.straat,j.klant.pc,j.toestel.merk,j.toestel.type,dt(j.datum)].join(' ').toLowerCase().includes(k))).sort((a,b)=>(b.datum+b.nr).localeCompare(a.datum+a.nr));
  let m='';return a.map(j=>{const h=j.datum?new Date(j.datum).toLocaleDateString('nl-BE',{month:'long',year:'numeric'}):'Zonder datum',t=h!=m?`<h2 style="margin-top:12px">${h}</h2>`:'';m=h;return t+row(j)}).join('')||'<p class="mu">Geen afgeronde onderhouden gevonden.</p>'}
@@ -299,11 +303,11 @@ function VL(){const n=S.jobs.filter(j=>j.status=='afgewerkt').length,soon=follow
  return `<img class="lg" src="logo-app.png" alt="Van Eyen Technics"><div class="top"><h1>VET Heat</h1><button class="b2" onclick="go('set')">Instellingen</button></div>
 <button style="width:100%;margin-bottom:12px;padding:14px" onclick="newJ()">+ Nieuw onderhoud</button>
 ${S.jobs.length&&(!S.bk||Date.now()-S.bk>12096e5)?`<p class="mu" style="cursor:pointer" onclick="go('set')">⚠ Maak een back-up (Instellingen)${S.bk?' · laatste: '+dt(S.bk):''}</p>`:''}
-${(()=>{const v=S.jobs.filter(vekaOpen);if(!v.length)return'';const m=Math.min(...v.map(vekaLeft));return `<div class="warn" style="cursor:pointer;${m<0?'background:var(--rd);color:#fff':''}" onclick="tab='veka';q='';R()">📨 ${v.length} onderhoud${v.length>1?'en':''} nog te melden bij VEKA – ${m<0?'termijn verstreken!':'eerste binnen '+m+' dag'+(m==1?'':'en')} ›</div>`})()}
-${tab=='veka'?'<div class="top" style="margin-bottom:8px"><h2 style="margin:0">Nog te melden bij VEKA</h2><button class="b2" onclick="tab=\'af\';R()">Sluiten</button></div>':''}
+${(()=>{const u=S.jobs.filter(j=>vekaOpen(j)&&vekaLeft(j)<=3);if(!u.length||tab=='veka')return'';const m=Math.min(...u.map(vekaLeft));return `<div class="warn" style="cursor:pointer;${m<0?'background:var(--rd);color:#fff':''}" onclick="tab='veka';vsub='te';q='';R()">📨 ${u.length} VEKA-melding${u.length>1?'en':''} ${m<0?'te laat!':'dringend: nog '+m+' dag'+(m==1?'':'en')} ›</div>`})()}
 ${!S.tsig?`<div class="warn" style="cursor:pointer" onclick="go('set')">Stel eerst je handtekening en erkenningsnummer in bij Instellingen.</div>`:''}
-<div class="tg tabs" style="margin-bottom:12px"><button class="${tab=='open'?'on':''}" onclick="tab='open';q='';R()">Open</button><button class="${tab=='af'?'on':''}" onclick="tab='af';q='';R()">Afgerond (${n})</button><button class="${tab=='op'?'on':''}" onclick="tab='op';q='';R()">Opvolging${soon?` (${soon})`:''}</button><button class="${tab=='kl'?'on':''}" onclick="tab='kl';q='';R()">Klanten</button></div>
-${tab!='open'&&tab!='veka'?`<input type="search" placeholder="Zoek op klant, adres, nummer, toestel of datum" value="${esc(q)}" oninput="q=this.value;fl()">`:''}
+<div class="tg tabs" style="margin-bottom:12px"><button class="${tab=='open'?'on':''}" onclick="tab='open';q='';R()">Open</button><button class="${tab=='af'?'on':''}" onclick="tab='af';q='';R()">Afgerond</button><button class="${tab=='op'?'on':''}" onclick="tab='op';q='';R()">Opvolging</button><button class="${tab=='kl'?'on':''}" onclick="tab='kl';q='';R()">Klanten</button>${(()=>{const o=S.jobs.filter(vekaOpen),late=o.some(j=>vekaLeft(j)<0);return `<button class="${tab=='veka'?'on':''}" style="${late&&tab!='veka'?'background:var(--rd);color:#fff':''}" onclick="tab='veka';q='';R()">VEKA${o.length?` (${o.length})`:''}</button>`})()}</div>
+${tab=='veka'?`<div class="tg" style="margin-bottom:10px"><button class="${vsub=='te'?'on':''}" onclick="vsub='te';R()">Te melden (${S.jobs.filter(vekaOpen).length})</button><button class="${vsub=='ok'?'on':''}" onclick="vsub='ok';R()">Gemeld (${S.jobs.filter(j=>j.status=='afgewerkt'&&j.veka&&j.veka.ok).length})</button></div>`:''}
+${tab!='open'?`<input type="search" placeholder="Zoek op klant, adres, nummer, toestel of datum" value="${esc(q)}" oninput="q=this.value;fl()">`:''}
 ${tab=='kl'?'<button class="b2" style="width:100%;margin-bottom:10px" onclick="newC()">+ Nieuwe klant</button>':''}<div id="lst">${LST()}</div>`}
 
 /* ---------- klant ---------- */
