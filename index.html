@@ -122,7 +122,7 @@ function gasHint(j){const pc=(j.at.anders&&j.at.pc)||j.klant.pc||'',g=(pc.match(
 const CHECKS=[['olie','Geen zichtbaar oliespoor bij rookindexbepaling','1'],['condens','Geen ongewenste condensvorming in rookgasafvoerkanaal (type B)','12'],['rook','Zelden hinderlijke en milieuverontreinigende rook','3'],
  ['drukRga','Druk rookgasafvoerkanaal','123'],['verluchting','Verluchting en ventilatie stooklokaal','123'],['dichtheidRga','Dichtheid rookgasafvoerkanaal (type C)','12'],['dichtheidGas','Dichtheid brandstoftoevoerleiding (gasmeter tot stooktoestel)','2']];
 const fuel=j=>FUEL[j.km.brandstof]||'';
-const chkFor=j=>CHECKS.filter(x=>x[2].includes(fuel(j))&&!(x[0]=='condens'&&j.km.aansl=='C')&&!(x[0]=='dichtheidRga'&&j.km.aansl=='B'));
+const chkFor=j=>CHECKS.filter(x=>x[2].includes(fuel(j))&&!(x[0]=='condens'&&j.km.aansl=='C')&&!(x[0]=='dichtheidRga'&&j.km.aansl=='B')&&!(x[0]=='drukRga'&&j.km.aansl=='C'));
 const rowsFor=j=>{const f=fuel(j);return f?ROWS.filter(r=>r[3].includes(f)):[]};
 const cols=j=>['p1'].concat(j.verb.laag?['low']:[]).concat(j.verb.hoog?['high']:[]);
 function setM(r,c,x){const j=J(),m=j.verb.meet;(m[r]??={})[c]=x;
@@ -164,7 +164,7 @@ function missing(j){const m=[],c=S.cfg,b=j.km.brandstof;
   if((j.verb.laag||j.verb.hoog)&&need.some(r=>cols(j).slice(1).some(c=>!me[r]?.[c])))m.push('Eindmeting niet volledig ingevuld');
   if(need.length&&!j.verb.laag&&!j.verb.hoog)m.push('Eindmeting: laaglast en/of hooglast');
   OKR.filter(r=>rowsFor(j).some(x=>x[0]==r)).forEach(r=>{if(!j.verb.okNok[r])m.push('OK / Niet OK: '+ROWS.find(x=>x[0]==r)[1])});
-  chkFor(j).forEach(x=>{if(!j.verb.checks[x[0]])m.push('Controle: '+x[1])});
+  chkFor(j).forEach(x=>{if(!j.verb.checks[x[0]])m.push('Controle: '+x[1])});if(j.km.aansl=='B'&&chkFor(j).some(x=>x[0]=='drukRga')&&j.verb.drukPa==='')m.push('Trek rookgasafvoerkanaal (Pa) – verplicht bij type B');
   if(j.verb.soort=='keuring'){KPUNT.forEach(([x,lb])=>{if(!(j.verb.keur||{})[x])m.push('Keuring: '+lb)});if(!magGebruik(j))m.push('Keuring: mag in gebruik ja/nee')}
   if(!j.verb.werkt||!j.verb.veilig)m.push('Eindbeoordeling goed/veilig');if(!j.volgV)m.push('Datum volgende verbrandingscontrole');
   if(b!='vast'&&!j.tickP1.length)m.push('Foto meetticket Proef I (initiële meting)');if(b!='vast'&&(j.verb.laag||j.verb.hoog)&&!j.tickP2.length)m.push('Foto meetticket Proef II (eindmeting)')}
@@ -202,7 +202,7 @@ function data(j,kind){const c=S.cfg,cs=cols(j),meet={};rowsFor(j).forEach(([r])=
  return{volgnummer:j.nr,soort:j.verb.soort,firma:{naam:c.firma.naam,straat:c.firma.straat,postcode:c.firma.pc,tel:c.firma.tel,email:c.firma.email,kbo:c.firma.kbo},tech:{naam:c.tech.naam,gv:c.tech.gv,tv:c.tech.tv,rol:j.rol},
  datum:j.datum,van:j.van,tot:j.tot,klant:{naam:j.klant.n,straat:j.klant.straat,postcode:j.klant.pc,tel:j.klant.tel,email:j.klant.mail},adresToestel:{anders:j.at.anders,naam:j.at.naam,straat:j.at.straat,postcode:j.at.pc},
  kenmerken:kmData(j),toestel:j.toestel,brander:j.brander,reiniging:rein,gebreken:j.gebreken,maatregelen:j.maatregelen,opmerkingen:j.opm,volgendeToestel:j.volgT,volgendeKanaal:j.volgK,volgende:j.volgV,
- verbranding:{laaglast:j.verb.laag,hooglast:j.verb.hoog,meet,okNok,checks,drukPa:j.verb.drukPa,werkt:j.verb.werkt,veilig:j.verb.veilig},handtekening:{tech:S.tsig,klant:j.sig},
+ verbranding:{laaglast:j.verb.laag,hooglast:j.verb.hoog,meet,okNok,checks,drukPa:j.km.aansl=='C'?'':j.verb.drukPa,werkt:j.verb.werkt,veilig:j.verb.veilig},handtekening:{tech:S.tsig,klant:j.sig},
  bijlagen:kind=='verb'?[...j.tickP1.map((d,i,a)=>({titel:'Afdruk meettoestel – Proef I: initiële meting'+(a.length>1?' ('+(i+1)+')':''),data:d})),...j.tickP2.map((d,i,a)=>({titel:'Afdruk meettoestel – Proef II: eindmeting'+[j.verb.laag&&' laaglast',j.verb.hoog&&' hooglast'].filter(Boolean).join(' +')+(a.length>1?' ('+(i+1)+')':''),data:d}))]:[]}}
 let LOGO;const logoBytes=async()=>LOGO||(LOGO=await(await fetch('logo.png')).arrayBuffer());
 const TPL={};async function tpl(k){if(!TPL[k])TPL[k]=await(await fetch(VETAttest.MAP[k].file)).arrayBuffer();return TPL[k]}
