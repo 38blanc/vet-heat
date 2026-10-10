@@ -165,12 +165,13 @@ function missing(j){const m=[],c=S.cfg,b=j.km.brandstof;
   if(need.length&&!j.verb.laag&&!j.verb.hoog)m.push('Eindmeting: laaglast en/of hooglast');
   OKR.filter(r=>rowsFor(j).some(x=>x[0]==r)).forEach(r=>{if(!j.verb.okNok[r])m.push('OK / Niet OK: '+ROWS.find(x=>x[0]==r)[1])});
   chkFor(j).forEach(x=>{if(!j.verb.checks[x[0]])m.push('Controle: '+x[1])});
+  if(j.verb.soort=='keuring'){KPUNT.forEach(([x,lb])=>{if(!(j.verb.keur||{})[x])m.push('Keuring: '+lb)});if(!magGebruik(j))m.push('Keuring: mag in gebruik ja/nee')}
   if(!j.verb.werkt||!j.verb.veilig)m.push('Eindbeoordeling goed/veilig');if(!j.volgV)m.push('Datum volgende verbrandingscontrole');
   if(b!='vast'&&!j.tickP1.length)m.push('Foto meetticket Proef I (initiële meting)');if(b!='vast'&&(j.verb.laag||j.verb.hoog)&&!j.tickP2.length)m.push('Foto meetticket Proef II (eindmeting)')}
  if((j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig')&&!j.gebreken)m.push('Gebreken invullen (toestel niet goed/niet veilig)');
  if(!j.sig)m.push('Handtekening klant');return m}
 function fin(){const j=J(),m=missing(j);if(m.length&&!confirm('Nog niet volledig:\n\n• '+m.join('\n• ')+'\n\nToch afronden?'))return;
- if(j.run){j.tot=hhmm();j.run=0}j.status='afgewerkt';upClient(j);save();R()}
+ if(j.run){j.tot=hhmm();j.run=0}j.status='afgewerkt';upClient(j);save();R();setTimeout(()=>$('#veka')?.scrollIntoView({behavior:'smooth'}),50)}
 function reopen(){J().status='open';save();R()}
 function upClient(j){const n=j.klant.n.trim();if(!n)return;let c=S.clients.find(c=>c.id==j.cid)||S.clients.find(c=>c.n.trim().toLowerCase()==n.toLowerCase());
  if(!c){c={id:'c'+Date.now().toString(36),n:'',straat:'',pc:'',tel:'',mail:''};S.clients.push(c)}j.cid=c.id;
@@ -210,22 +211,84 @@ async function deliver(file){try{if(navigator.canShare?.({files:[file]})){await 
 async function pdf(id,which='beide'){try{const j=id?S.jobs.find(x=>x.id==id):J(),ks=(which=='beide'?['verb','rein']:[which]).filter(k=>j.att[k]);if(!ks.length)return alert('Duid eerst aan welk attest je opmaakt.');
  if(j.km.brandstof=='vloeibaar'&&!S.cfg.tech.tv)return alert('Attesten voor stookolie vereisen een TV-erkenningsnummer (Instellingen).');
  autoOK(j);const parts=[];for(const k of ks)parts.push((await VETAttest.fillAttest(k,data(j,k),await tpl(k),{ink:S.cfg.ink,logo:await logoBytes()})).bytes);
- let bytes=parts[0];if(parts.length>1){const L=PDFLib,out=await L.PDFDocument.create();out.setTitle('Attesten '+j.nr);const docs=[];for(const p of parts)docs.push(await L.PDFDocument.load(p));
+ const ksr=j.att.verb&&j.verb.soort=='keuring'&&ks.includes('verb');if(ksr)parts.unshift(await verslagPdf(j));
+ let bytes=parts[0];if(parts.length>1){const L=PDFLib,out=await L.PDFDocument.create();out.setTitle((ksr?'Keuringsrapport ':'Attesten ')+j.nr);const docs=[];for(const p of parts)docs.push(await L.PDFDocument.load(p));
  /* eerst de attesten zelf (verbranding, reiniging), daarna alle bijlagen; het meetticket staat zo helemaal achteraan */
  for(const d of docs)out.addPage((await out.copyPages(d,[0]))[0]);for(const d of [...docs].reverse()){const ix=d.getPageIndices().slice(1);if(ix.length)(await out.copyPages(d,ix)).forEach(pg=>out.addPage(pg))}bytes=await out.save()}
- const nm=safe(j.nr)+(ks.length>1?'':ks[0]=='rein'?' Reinigingsattest':' Verbrandingsattest')+'.pdf';await deliver(new File([bytes],nm,{type:'application/pdf'}))}catch(e){alert('PDF maken mislukt: '+e.message)}}
+ const nm=safe(j.nr)+(ksr?' Keuringsrapport':ks.length>1?'':ks[0]=='rein'?' Reinigingsattest':' Verbrandingsattest')+'.pdf';await deliver(new File([bytes],nm,{type:'application/pdf'}))}catch(e){alert('PDF maken mislukt: '+e.message)}}
+
+/* ---------- keuring vóór eerste ingebruikname: verslag van de keuring ----------
+   Keuringsrapport = verslag van de keuring + verbrandingsattest. Er bestaat geen officieel model voor het verslag;
+   wettelijk moet het minstens naam, erkenningsnummer en handtekening van de technicus bevatten en zeggen of het toestel in gebruik mag. */
+const KPUNT=[['plaatsing','Toestel geplaatst volgens de voorschriften van de fabrikant'],['afvoer','Rookgasafvoer en luchttoevoer conform het type (B/C) en correct aangesloten'],
+ ['ventilatie','Verluchting en ventilatie van het stooklokaal'],['dichtheid','Dichtheid brandstoftoevoerleiding (gasmeter tot stooktoestel)'],['veiligheid','Veiligheidsvoorzieningen werken correct'],
+ ['co','Geen risico op CO-vergiftiging vastgesteld'],['verbranding','Verbranding milieuvriendelijk en energiezuinig (zie verbrandingsattest)']];
+const kOK=j=>{const k=j.verb.keur||{};return KPUNT.every(([x])=>k[x]=='ok')&&j.verb.werkt=='goed'&&j.verb.veilig=='veilig'};
+const magGebruik=j=>{const k=j.verb.keur||{};return k.mag||(KPUNT.some(([x])=>k[x]=='nok')||isRej(j)?'nee':kOK(j)?'ja':'')};
+function setK(x,v){const j=J();j.verb.keur=j.verb.keur||{};j.verb.keur[x]=j.verb.keur[x]==v?'':v;save();R()}
+async function verslagPdf(j){const L=PDFLib,doc=await L.PDFDocument.create(),f=await doc.embedFont(L.StandardFonts.Helvetica),fb=await doc.embedFont(L.StandardFonts.HelveticaBold);
+ const pg=doc.addPage([595.28,841.89]),dk=L.rgb(.1,.12,.15),gr=L.rgb(.42,.45,.5),bl=L.rgb(.1,.42,.54),ink=S.cfg.ink=='zwart'?L.rgb(.05,.05,.05):L.rgb(.05,.16,.48),M=40,W=595.28;let y=800;
+ const cl=t=>String(t??'').replace(/[–—]/g,'-').replace(/[^\x20-\x7E\xA0-\xFF€]/g,'');const tx=(t,x,yy,sz=9.5,ft=f,c=dk)=>pg.drawText(cl(t),{x,y:yy,size:sz,font:ft,color:c});
+ const line=yy=>pg.drawLine({start:{x:M,y:yy},end:{x:W-M,y:yy},thickness:.6,color:L.rgb(.75,.78,.8)});
+ const lg=await doc.embedPng(await logoBytes()),ld=lg.scale(46/lg.width);pg.drawImage(lg,{x:W-M-ld.width,y:y-ld.height+12,width:ld.width,height:ld.height});
+ tx('VERSLAG VAN DE KEURING',M,y,15,fb,bl);y-=16;tx('Keuring van een centraal stooktoestel vóór eerste ingebruikname – volgnummer '+j.nr,M,y,9.5,f,gr);y-=12;
+ tx('Onderdeel van het keuringsrapport, samen met het bijgevoegde verbrandingsattest.',M,y,8.5,f,gr);y-=14;line(y);y-=16;
+ const c=S.cfg,col=(lbl,rows,x)=>{let yy=y;tx(lbl,x,yy,8,fb,gr);yy-=13;rows.filter(r=>r[1]).forEach(([a,b])=>{tx(a,x,yy,8.5,f,gr);tx(b,x+92,yy,9.5,f,ink);yy-=12.5});return yy};
+ const y1=col('FIRMA / TECHNICUS',[['Firma',c.firma.naam],['Adres',[c.firma.straat,c.firma.pc].filter(Boolean).join(', ')],['Ondernemingsnr.',c.firma.kbo],['Technicus',c.tech.naam],['Erkenningsnr.',[c.tech.gv,c.tech.tv].filter(Boolean).join(' / ')],['Datum keuring',dt(j.datum)]],M);
+ const at=j.at.anders?[j.at.straat,j.at.pc]:[j.klant.straat,j.klant.pc];
+ const y2=col('KLANT / INSTALLATIE',[['Klant',j.klant.n],['Adres toestel',at.filter(Boolean).join(', ')],['Toestel',[j.toestel.merk,j.toestel.type].filter(Boolean).join(' ')],['Fabricatienr.',j.toestel.serie],['Vermogen',j.toestel.vermogen?j.toestel.vermogen+' kW':''],['Brandstof / type',[{gas:'Gas',vloeibaar:'Stookolie',vast:'Vaste brandstof'}[j.km.brandstof],j.km.aansl?'type '+j.km.aansl+(j.km.code?' ('+j.km.code+')':''):''].filter(Boolean).join(' – ')]],305);
+ y=Math.min(y1,y2)-6;line(y);y-=18;tx('CONTROLEPUNTEN',M,y,8,fb,gr);tx('OK',W-M-70,y,8,fb,gr);tx('NIET OK',W-M-38,y,8,fb,gr);y-=14;
+ const k=j.verb.keur||{};const box=(x,yy,on)=>{pg.drawRectangle({x,y:yy-1,width:8,height:8,borderColor:dk,borderWidth:.7});if(on){pg.drawLine({start:{x:x+1,y:yy},end:{x:x+7,y:yy+6},thickness:1.1,color:ink});pg.drawLine({start:{x:x+1,y:yy+6},end:{x:x+7,y:yy},thickness:1.1,color:ink})}};
+ KPUNT.forEach(([x,lb])=>{tx(lb,M,y);box(W-M-68,y,k[x]=='ok');box(W-M-30,y,k[x]=='nok');y-=8;line(y);y-=12});
+ y-=4;tx('Eindbeoordeling verbrandingsattest: het stooktoestel werkt '+({goed:'goed',nietgoed:'niet goed'}[j.verb.werkt]||'…')+' en '+({veilig:'veilig',nietveilig:'niet veilig'}[j.verb.veilig]||'…')+'.',M,y);y-=22;
+ const mg=magGebruik(j);pg.drawRectangle({x:M,y:y-10,width:W-2*M,height:24,color:mg=='nee'?L.rgb(.99,.92,.9):L.rgb(.91,.96,.93)});
+ tx('CONCLUSIE: het stooktoestel mag '+(mg=='ja'?'':mg=='nee'?'NIET ':'… ')+'in gebruik genomen worden.',M+8,y-2,11,fb,mg=='nee'?L.rgb(.7,.15,.1):L.rgb(.1,.45,.25));y-=30;
+ const wrap=(t,w,sz)=>{const o=[];for(const pa of cl(t).split('\n')){let l='';for(const wd of pa.split(' ')){const u=l?l+' '+wd:wd;if(l&&f.widthOfTextAtSize(u,sz)>w){o.push(l);l=wd}else l=u}o.push(l)}return o};
+ if(j.gebreken){tx('Vastgestelde gebreken',M,y,8,fb,gr);y-=13;wrap(j.gebreken,W-2*M,9.5).slice(0,8).forEach(l=>{tx(l,M,y,9.5,f,ink);y-=12})}
+ if(mg=='nee'){y-=4;wrap('De gebreken moeten hersteld worden binnen de drie maanden na de datum van dit keuringsrapport; het bewijs is een nieuw keuringsrapport.',W-2*M,8.5).forEach(l=>{tx(l,M,y,8.5,f,gr);y-=11})}
+ y=Math.min(y,250)-10;line(y);y-=14;tx('Handtekening erkend technicus',M,y,8,fb,gr);tx('Voor kennisname – klant',305,y,8,fb,gr);
+ for(const[d,x]of[[S.tsig,M],[j.sig,305]])if(d){const im=await doc.embedPng(d),z=im.scaleToFit(220,70);pg.drawImage(im,{x,y:y-8-z.height,width:z.width,height:z.height})}
+ tx(c.tech.naam,M,y-90,9);tx(j.klant.n,305,y-90,9);
+ tx('Keuring met toepassing van het besluit van de Vlaamse Regering van 8 december 2006 (stooktoestellenbesluit). Bij verhuur bezorgt de eigenaar een kopie aan de huurder.',M,40,7,f,gr);
+ return await doc.save()}
+
+/* ---------- melding bij VEKA (verplicht binnen 30 dagen na onderhoud of keuring, via melding.veka.vlaanderen.be) ---------- */
+const VEKA_URL='https://melding.veka.vlaanderen.be';
+const vekaOpen=j=>j.status=='afgewerkt'&&!(j.veka&&j.veka.ok);
+const vekaLeft=j=>30-Math.round((new Date(today())-new Date(j.datum))/864e5);
+const vekaTag=j=>{if(!vekaOpen(j))return j.veka&&j.veka.ok?'<span class="tag d">VEKA ✓</span>':'';const n=vekaLeft(j);return `<span class="tag ${n<0?'r':n<=7?'w':''}">VEKA ${n<0?'te laat ('+(-n)+' d)':'nog '+n+' d'}</span>`};
+function vekaFields(j){const c=S.cfg,k=j.km,at=j.at.anders?j.at:{straat:j.klant.straat,pc:j.klant.pc},pc=(at.pc||'').match(/^\s*(\d{4})\s*(.*)$/)||[];
+ const br={gas:'Gas – '+({aardgas:'aardgas',lpg:'LPG',andere:k.gasAndereTxt||'andere'}[k.gassoort]||''),vloeibaar:'Stookolie (vloeibaar)',vast:'Vaste brandstof – '+({pellets:'houtpellets',blokken:'houtblokken',andere:k.vastAndereTxt||'andere'}[k.vastSoort]||'')}[k.brandstof]||'';
+ return [['Soort activiteit',j.verb.soort=='keuring'?'Keuring vóór eerste ingebruikname':'Periodiek onderhoud'],['Datum activiteit',dt(j.datum)],
+ ['Straat en nummer',at.straat],['Postnummer',pc[1]||''],['Gemeente',pc[2]||at.pc],['Klant',j.klant.n],
+ ['Brandstof',br.replace(/ – $/,'')],['Type toestel',k.aansl?'Type '+k.aansl+(k.code?' ('+k.code+')':''):''],['Merk',j.toestel.merk],['Type / model',j.toestel.type],['Fabricatienummer',j.toestel.serie],['Bouwjaar',j.toestel.bouwjaar],['Nominaal vermogen (kW)',j.toestel.vermogen],
+ ['Brander merk/type',[j.brander.merk,j.brander.type].filter(Boolean).join(' ')],
+ ['Eindbeoordeling',[{goed:'Werkt goed',nietgoed:'Werkt niet goed'}[j.verb.werkt],{veilig:'veilig',nietveilig:'niet veilig'}[j.verb.veilig]].filter(Boolean).join(', ')],
+ ['Erkenningsnummer',[c.tech.gv,c.tech.tv].filter(Boolean).join(' / ')],['Volgnummer attest',j.nr]].filter(x=>x[1])}
+async function cp(t,el){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}if(el){const o=el.innerHTML;el.innerHTML='✓ gekopieerd';setTimeout(()=>el.innerHTML=o,900)}}
+function cpAll(el){cp(vekaFields(J()).map(([a,b])=>a+': '+b).join('\n'),el)}
+function vekaSet(ok){const j=J();j.veka={ok,d:ok?today():''};save();R()}
+const VEKA=j=>{if(j.status!='afgewerkt')return'';const ok=j.veka&&j.veka.ok,n=vekaLeft(j);
+ return `<div class="c" id="veka"><div class="top"><h2 style="margin:0">Melding bij VEKA</h2>${vekaTag(j)}</div>
+${ok?`<p style="margin:10px 0">✓ Gemeld op ${dt(j.veka.d)}.</p><button class="b2" onclick="vekaSet(false)">Ongedaan maken</button>`:`
+<p class="mu" style="margin:8px 0">Verplicht binnen 30 dagen na het onderhoud (uiterlijk ${dt(new Date(new Date(j.datum).getTime()+30*864e5))}). Tik op een waarde om ze te kopiëren en plak ze in het VEKA-formulier.</p>
+<div class="row wrap" style="margin-bottom:10px"><a class="up" style="text-decoration:none;background:var(--ac);color:#fff" href="${VEKA_URL}" target="_blank" rel="noopener">Open VEKA-melding ↗</a><button class="b2" onclick="cpAll(this)">Kopieer alles</button></div>
+${vekaFields(j).map(([a,b])=>`<div class="chk" style="cursor:pointer" onclick="cp(${esc(JSON.stringify(b))},this.querySelector('b'))"><span class="mu" style="flex:0 0 40%">${a}</span><b style="font-weight:600;text-align:right;flex:1;overflow-wrap:anywhere">${esc(b)}</b></div>`).join('')}
+<p class="mu" style="margin:10px 0">Het attest als bijlage is optioneel. Gebruik de pdf-knop hieronder om het te bewaren of te delen.</p>
+<button class="ok" style="width:100%" onclick="vekaSet(true)">✓ Gemeld bij VEKA</button>`}</div>`};
 
 /* ---------- lijsten ---------- */
 const due=j=>[j.att.verb&&j.volgV,j.att.rein&&j.volgT,j.att.rein&&j.volgK].filter(Boolean).sort()[0]||'';
 const days=d=>Math.round((new Date(d)-new Date(today()))/864e5);
 const dueTag=d=>{if(!d)return'';const n=days(d);return n<0?`<span class="tag r">Vervallen ${dt(d)}</span>`:n<=60?`<span class="tag w">Vóór ${dt(d)}</span>`:`<span class="tag">Vóór ${dt(d)}</span>`};
 const atts=j=>[j.att.verb&&'Verbranding',j.att.rein&&'Reiniging'].filter(Boolean).join(' + ');
-const row=j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · ${dt(j.datum)} · ${atts(j)}</div><div class="mu">${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div class="row">${j.run?'<span class="tag r">Loopt</span>':''}${j.status=='afgewerkt'?`<button class="b2" onclick="event.stopPropagation();pdf('${j.id}')">⬇ PDF</button>`:''}</div></div>`;
+const row=j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · ${dt(j.datum)} · ${atts(j)}</div><div class="mu">${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div class="row" style="flex-direction:column;align-items:flex-end;gap:6px">${j.run?'<span class="tag r">Loopt</span>':''}${vekaTag(j)}${j.status=='afgewerkt'?`<button class="b2" onclick="event.stopPropagation();pdf('${j.id}')">⬇ PDF</button>`:''}</div></div>`;
 const jobsOf=c=>S.jobs.filter(j=>j.cid==c.id||(!j.cid&&j.klant.n.trim().toLowerCase()==c.n.trim().toLowerCase()));
 function follow(){return S.clients.map(c=>{const h=jobsOf(c).filter(j=>j.status=='afgewerkt').sort((a,b)=>b.datum.localeCompare(a.datum));return h[0]?{c,j:h[0],d:due(h[0])}:null}).filter(x=>x&&x.d).sort((a,b)=>a.d.localeCompare(b.d))}
 function LST(){const k=q.trim().toLowerCase();
  if(tab=='kl'){const a=S.clients.filter(c=>!k||[c.n,c.straat,c.pc,c.tel,c.mail,c.inst?.toestel?.merk].join(' ').toLowerCase().includes(k)).sort((a,b)=>a.n.localeCompare(b.n));return a.map(c=>`<div class="item" onclick="go('cd','${c.id}')"><div><b>${esc(c.n)||'Zonder naam'}</b><div class="mu">${esc([c.straat,c.pc].filter(Boolean).join(', '))}</div></div><span class="tag">${jobsOf(c).length} onderhoud(en)</span></div>`).join('')||'<p class="mu">Nog geen klanten. Ze worden automatisch bewaard (met hun toestel) zodra je een onderhoud afrondt.</p>'}
  if(tab=='op'){const a=follow().filter(x=>!k||[x.c.n,x.c.straat,x.c.pc].join(' ').toLowerCase().includes(k));return a.map(({c,j,d})=>`<div class="item" onclick="go('cd','${c.id}')"><div><b>${esc(c.n)}</b><div class="mu">${esc([c.straat,c.pc].filter(Boolean).join(', '))}</div><div class="mu">Laatste onderhoud ${dt(j.datum)} · ${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div style="text-align:right">${dueTag(d)}<br><button class="b2" style="margin-top:6px;padding:6px 10px;white-space:nowrap" onclick="event.stopPropagation();newJ('${c.id}')">+ Onderhoud</button></div></div>`).join('')||'<p class="mu">Nog niets op te volgen. Afgeronde onderhouden met een volgende datum verschijnen hier.</p>'}
+ if(tab=='veka'){const a=S.jobs.filter(vekaOpen).sort((a,b)=>a.datum.localeCompare(b.datum));return a.map(row).join('')||'<p class="mu">Alles is gemeld bij VEKA. ✓</p>'}
  if(tab=='open'){const a=S.jobs.filter(j=>j.status!='afgewerkt');return a.map(row).join('')||'<p class="mu">Geen open onderhouden.</p>'}
  const a=S.jobs.filter(j=>j.status=='afgewerkt'&&(!k||[j.nr,j.klant.n,j.klant.straat,j.klant.pc,j.toestel.merk,j.toestel.type,dt(j.datum)].join(' ').toLowerCase().includes(k))).sort((a,b)=>(b.datum+b.nr).localeCompare(a.datum+a.nr));
  let m='';return a.map(j=>{const h=j.datum?new Date(j.datum).toLocaleDateString('nl-BE',{month:'long',year:'numeric'}):'Zonder datum',t=h!=m?`<h2 style="margin-top:12px">${h}</h2>`:'';m=h;return t+row(j)}).join('')||'<p class="mu">Geen afgeronde onderhouden gevonden.</p>'}
@@ -234,9 +297,11 @@ function VL(){const n=S.jobs.filter(j=>j.status=='afgewerkt').length,soon=follow
  return `<img class="lg" src="logo-app.png" alt="Van Eyen Technics"><div class="top"><h1>VET Heat</h1><button class="b2" onclick="go('set')">Instellingen</button></div>
 <button style="width:100%;margin-bottom:12px;padding:14px" onclick="newJ()">+ Nieuw onderhoud</button>
 ${S.jobs.length&&(!S.bk||Date.now()-S.bk>12096e5)?`<p class="mu" style="cursor:pointer" onclick="go('set')">⚠ Maak een back-up (Instellingen)${S.bk?' · laatste: '+dt(S.bk):''}</p>`:''}
+${(()=>{const v=S.jobs.filter(vekaOpen);if(!v.length)return'';const m=Math.min(...v.map(vekaLeft));return `<div class="warn" style="cursor:pointer;${m<0?'background:var(--rd);color:#fff':''}" onclick="tab='veka';q='';R()">📨 ${v.length} onderhoud${v.length>1?'en':''} nog te melden bij VEKA – ${m<0?'termijn verstreken!':'eerste binnen '+m+' dag'+(m==1?'':'en')} ›</div>`})()}
+${tab=='veka'?'<div class="top" style="margin-bottom:8px"><h2 style="margin:0">Nog te melden bij VEKA</h2><button class="b2" onclick="tab=\'af\';R()">Sluiten</button></div>':''}
 ${!S.tsig?`<div class="warn" style="cursor:pointer" onclick="go('set')">Stel eerst je handtekening en erkenningsnummer in bij Instellingen.</div>`:''}
 <div class="tg tabs" style="margin-bottom:12px"><button class="${tab=='open'?'on':''}" onclick="tab='open';q='';R()">Open</button><button class="${tab=='af'?'on':''}" onclick="tab='af';q='';R()">Afgerond (${n})</button><button class="${tab=='op'?'on':''}" onclick="tab='op';q='';R()">Opvolging${soon?` (${soon})`:''}</button><button class="${tab=='kl'?'on':''}" onclick="tab='kl';q='';R()">Klanten</button></div>
-${tab!='open'?`<input type="search" placeholder="Zoek op klant, adres, nummer, toestel of datum" value="${esc(q)}" oninput="q=this.value;fl()">`:''}
+${tab!='open'&&tab!='veka'?`<input type="search" placeholder="Zoek op klant, adres, nummer, toestel of datum" value="${esc(q)}" oninput="q=this.value;fl()">`:''}
 ${tab=='kl'?'<button class="b2" style="width:100%;margin-bottom:10px" onclick="newC()">+ Nieuwe klant</button>':''}<div id="lst">${LST()}</div>`}
 
 /* ---------- klant ---------- */
@@ -329,6 +394,9 @@ ${OKR.includes(r)?`<tr class="nb"><td colspan="${cs.length+1}" style="border-top
 <h3>Eindbeoordeling – het stooktoestel werkt</h3>${WERKT(j)}
 <div class="tg">${[['veilig','Veilig'],['nietveilig','Niet veilig']].map(([x,l])=>`<button class="${j.verb.veilig==x?'on':''}" onclick="pickv('verb.veilig','${x}')">${l}</button>`).join('')}</div>
 ${j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig'?'<div class="warn" style="margin-top:10px">Gebreken moeten binnen 3 maanden hersteld worden, met een nieuw attest als bewijs. De volgende verbrandingscontrole is automatisch op +3 maanden gezet. Vul de gebreken hieronder in en laat de klant tekenen.</div>':''}
+${j.verb.soort=='keuring'?`<div class="sub"><h3>Verslag van de keuring (keuringsrapport)</h3><p class="mu" style="margin:-4px 0 8px">Wordt vooraan in de pdf geplaatst, samen met het verbrandingsattest = keuringsrapport.</p>
+${KPUNT.map(([x,lb])=>`<div class="chk"><span>${lb}</span><div class="on3"><button class="${(j.verb.keur||{})[x]=='ok'?'y':''}" onclick="setK('${x}','ok')">OK</button><button class="${(j.verb.keur||{})[x]=='nok'?'n':''}" onclick="setK('${x}','nok')">Niet OK</button></div></div>`).join('')}
+<h3>Het toestel mag in gebruik genomen worden</h3><div class="tg">${[['ja','Ja'],['nee','Nee']].map(([x,l])=>`<button class="${magGebruik(j)==x?'on':''}" onclick="setK('mag','${x}')">${l}${!(j.verb.keur||{}).mag&&magGebruik(j)==x?' (auto)':''}</button>`).join('')}</div></div>`:''}
 <h3>Eerstvolgende verbrandingscontrole vóór</h3>${F('volgV','Datum','date','id="volgV"')}${isRej(j)?'<p class="hint" style="margin:-4px 0 8px">Afgekeurd: automatisch op datum onderhoud + 3 maanden gezet (wettelijke hersteltermijn).</p>':''}
 ${b!='vast'?`<h3>Afdruk(ken) meettoestel</h3><p class="mu" style="margin:-4px 0 8px">Verplicht bij het attest. De foto's komen als laatste bijlage in de pdf, apart per proef.</p>
 <div class="sub" style="border:0;margin-top:0;padding-top:0"><b style="font-size:14px">Proef I – initiële meting</b><div style="margin-top:6px">${UP('tickP1')}</div>${PH('tickP1')}</div>
@@ -346,6 +414,7 @@ ${j.att.rein?`<label class="f"><span>Te treffen maatregelen om deze gebreken weg
 
 <div id="miss">${MISS(j)}</div>
 
+${VEKA(j)}
 <div class="row wrap" style="margin-bottom:12px">${done?'<button class="b2" onclick="reopen()">Heropenen</button>':'<button class="ok" onclick="fin()">Onderhoud afronden</button>'}${j.att.rein&&j.att.verb?`<button onclick="pdfK=!pdfK;R();scrollTo(0,document.body.scrollHeight)">PDF ▾</button>`:`<button onclick="pdf()">Exporteer als pdf</button>`}<button class="red" onclick="delJ()">Verwijderen</button></div>
 ${pdfK?`<div class="c"><h2>PDF exporteren</h2><div class="row wrap"><button onclick="pdf(0,'beide')">Beide attesten</button><button class="b2" onclick="pdf(0,'verb')">Verbrandingsattest</button><button class="b2" onclick="pdf(0,'rein')">Reinigingsattest</button></div></div>`:''}<div style="height:24px"></div>`}
 
