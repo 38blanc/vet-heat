@@ -5,6 +5,7 @@
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#1b6a8a"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="VET Heat">
 <script src="pdf-lib.min.js"></script>
 <script src="attest-engine.js"></script>
+<script src="schouw-types.js"></script>
 <style>
 :root{--bg:#eceff2;--card:#fff;--tx:#14202b;--mu:#617080;--ac:#1b6a8a;--ac2:#e8f2f6;--bd:#d5dbe1;--rd:#c8321c;--ok:#23844a;--wa:#b86a00;--wa2:#fdf1df;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10171d;--card:#19232c;--tx:#e9eef2;--mu:#8e9cab;--ac:#4fb0d3;--ac2:#1d3340;--bd:#2c3945;--rd:#ff6a50;--ok:#4cc27d;--wa:#ffb04a;--wa2:#3a2c17}}
@@ -65,6 +66,7 @@ const J=()=>S.jobs.find(j=>j.id==cur);
 const dt=d=>d?new Date(d).toLocaleDateString('nl-BE'):'';
 const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const hhmm=()=>new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
+const addM=(iso,m)=>{if(!iso)return'';const d=new Date(iso),day=d.getDate();d.setMonth(d.getMonth()+m);if(d.getDate()<day)d.setDate(0);return d.toISOString().slice(0,10)};
 const addY=(iso,y)=>{if(!iso)return'';const d=new Date(iso);d.setFullYear(d.getFullYear()+(+y||0));return d.toISOString().slice(0,10)};
 const num=s=>parseFloat(String(s??'').replace(',','.'));
 const fmt=n=>String(Math.round(n*10)/10).replace('.',',');
@@ -75,7 +77,8 @@ const gv=(p,o=J())=>p.split('.').reduce((a,k)=>a==null?a:a[k],o);
 function setp(o,p,x){const k=p.split('.'),l=k.pop();let t=o;for(const s of k)t=t[s]??=( {} );t[l]=x}
 function set(p,x){setp(J(),p,x);upMiss();sv()}
 function tog(p){set(p,!gv(p));R()}
-function pickv(p,x){if(p=='verb.werkt'&&x=='goed'&&OKR.some(r=>rowsFor(J()).some(y=>y[0]==r)&&auto(r)=='nok'))return alert('Niet mogelijk: CO en/of rendement liggen buiten de grenswaarden.');set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);save();R()}
+function pickCode(c){const j=J();j.km.code=c;j.km.aansl=c[0];save();R()}
+function pickv(p,x){if(p=='verb.werkt'&&x=='goed'&&OKR.some(r=>rowsFor(J()).some(y=>y[0]==r)&&auto(r)=='nok'))return alert('Niet mogelijk: CO en/of rendement liggen buiten de grenswaarden.');set(p,gv(p)==x?'':x);if(p=='km.brandstof')sugDates(1);if(p.startsWith('verb.'))rejDate();save();R()}
 const F=(p,lb,type='text',extra='')=>`<label class="f"><span>${lb}</span><input ${type=='num'?'inputmode="decimal"':`type="${type}"`} value="${esc(gv(p))}" oninput="set('${p}',this.value)" ${extra}></label>`;
 const CH=(p,lb)=>`<button class="ck ${gv(p)?'on':''}" onclick="tog('${p}')">${gv(p)?'✓ ':''}${lb}</button>`;
 const SEG=(p,opts)=>`<div class="tg">${opts.map(([x,l])=>`<button class="${gv(p)==x?'on':''}" onclick="pickv('${p}','${x}')">${l}</button>`).join('')}</div>`;
@@ -83,7 +86,7 @@ const SEG=(p,opts)=>`<div class="tg">${opts.map(([x,l])=>`<button class="${gv(p)
 /* ---------- onderhoud ---------- */
 function blank(){return{id:Date.now().toString(36),nr:'',status:'open',att:{rein:true,verb:true},cid:'',klant:{n:'',straat:'',pc:'',tel:'',mail:''},at:{anders:false,naam:'',straat:'',pc:''},datum:today(),van:'',tot:'',run:0,
  km:{centraal:true,aansl:'',code:'',brandstof:'',gassoort:'',gasAndereTxt:'',branderType:'',vastSoort:'',vastAndereTxt:''},toestel:{merk:'',type:'',bouwjaar:'',serie:'',vermogen:''},brander:{merk:'',type:'',bouwjaar:'',serie:'',debiet:''},
- rol:'erkend',rein:{},verb:{soort:'onderhoud',laag:false,hoog:false,meet:{},tnetMan:{},okNok:{},checks:{},drukPa:'',werkt:'',veilig:''},gebreken:'',maatregelen:'',opm:'',volgT:'',volgK:'',volgV:'',tickets:[],fotos:[],sig:'',sigT:0}}
+ rol:'erkend',rein:{},verb:{soort:'onderhoud',laag:false,hoog:false,meet:{},tnetMan:{},okNok:{},checks:{},drukPa:'',werkt:'',veilig:''},gebreken:'',maatregelen:'',opm:'',volgT:'',volgK:'',volgV:'',tickP1:[],tickP2:[],fotos:[],sig:'',sigT:0}}
 function newJ(cid){const j=blank(),y=new Date().getFullYear();j.nr=(S.cfg.prefix||'VH')+'-'+y+'-'+String(++S.seq).padStart(4,'0');
  const c=cid&&S.clients.find(c=>c.id==cid);if(c)fillFromClient(j,c);S.jobs.unshift(j);save();go('job',j.id)}
 function fillFromClient(j,c){j.cid=c.id;j.klant={n:c.n||'',straat:c.straat||'',pc:c.pc||'',tel:c.tel||'',mail:c.mail||''};
@@ -91,8 +94,13 @@ function fillFromClient(j,c){j.cid=c.id;j.klant={n:c.n||'',straat:c.straat||'',p
 function pickClient(x){const j=J(),c=S.clients.find(c=>c.n.trim().toLowerCase()==x.trim().toLowerCase());if(!c)return;
  const emptyDev=!j.toestel.merk&&!j.km.brandstof;j.cid=c.id;['straat','pc','tel','mail'].forEach(k=>{if(!j.klant[k])j.klant[k]=c[k]||''});
  if(emptyDev&&c.inst){if(c.inst.km)j.km=JSON.parse(JSON.stringify(c.inst.km));if(c.inst.toestel)j.toestel={...c.inst.toestel};if(c.inst.brander)j.brander={...c.inst.brander};if(c.inst.at)j.at={...c.inst.at};sugDates(1)}save();R()}
-function sugDates(onlyEmpty,j=J()){const y=S.cfg.int[j.km.brandstof]||'';if(!y||!j.datum)return;const d=addY(j.datum,y);
- for(const k of['volgT','volgK','volgV'])if(!onlyEmpty||!j[k])j[k]=d}
+function sugDates(onlyEmpty,j=J()){const y=S.cfg.int[j.km.brandstof]||'';if(y&&j.datum){const d=addY(j.datum,y);for(const k of['volgT','volgK','volgV'])if(!onlyEmpty||!j[k])j[k]=d}rejDate(j)}
+/* afgekeurd (niet goed of niet veilig) => volgende verbrandingscontrole binnen 3 maanden (termijn om gebreken te herstellen) */
+const isRej=j=>j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig';
+function rejDate(j=J()){if(!j.datum)return;const r=addM(j.datum,3);
+ if(isRej(j)){if(!j.rej){j.volgVprev=j.volgV;j.rej=1}j.volgV=r}
+ else if(j.rej){j.rej=0;const y=S.cfg.int[j.km.brandstof];j.volgV=j.volgVprev&&j.volgVprev!=r?j.volgVprev:(y?addY(j.datum,y):'')}
+ const e=$('#volgV');if(e&&e.value!=j.volgV)e.value=j.volgV}
 function delJ(){if(confirm('Dit onderhoud definitief verwijderen?')){S.jobs=S.jobs.filter(j=>j.id!=cur);save();go('list')}}
 function saveRn(){const t=$('#rnm').value.trim();if(t)J().nr=t;ren=0;save();R()}
 function clock(){const j=J();if(j.run){j.tot=hhmm();j.run=0}else{j.van=hhmm();j.tot='';j.run=1}save();R()}
@@ -106,6 +114,11 @@ const ROWS=[['ketelT','Keteltemperatuur','°C','12'],['sproeierMerk','Sproeier: 
  ['o2','Zuurstof O₂','%','12'],['co2','Koolstofdioxide CO₂','%','12'],['co','Koolstofmonoxide CO','mg/kWh','12'],['tg','Rookgastemperatuur tg','°C','12'],['ta','Temp. verbrandingslucht ta','°C','12'],
  ['tnet','Nettotemperatuur tg − ta','°C · automatisch','12'],['hi','Verbrandingsrendement Hi','%','12'],['hs','Verbrandingsrendement Hs','%','12']];
 const OKR=['rookindex','co','hi'];
+/* verwachte voedingsdruk: sinds eind zomer 2024 is heel België omgeschakeld van arm (L, 25 mbar) naar rijk gas (H, 21 mbar) */
+function gasHint(j){const pc=(j.at.anders&&j.at.pc)||j.klant.pc||'',g=(pc.match(/\b\d{4}\b/)||[''])[0],gem=pc.replace(/^\s*\d{4}\s*/,'').trim();
+ if(j.km.gassoort=='lpg')return'Verwacht LPG: propaan ± 37 mbar, butaan ± 28–30 mbar (zie ontspanner)';
+ if(j.km.gassoort=='andere')return'';
+ return'Verwacht: ± 21 mbar – rijk gas (H)'+(gem?' in '+gem:g?' ('+g+')':'')}
 const CHECKS=[['olie','Geen zichtbaar oliespoor bij rookindexbepaling','1'],['condens','Geen ongewenste condensvorming in rookgasafvoerkanaal (type B)','12'],['rook','Zelden hinderlijke en milieuverontreinigende rook','3'],
  ['drukRga','Druk rookgasafvoerkanaal','123'],['verluchting','Verluchting en ventilatie stooklokaal','123'],['dichtheidRga','Dichtheid rookgasafvoerkanaal (type C)','12'],['dichtheidGas','Dichtheid brandstoftoevoerleiding (gasmeter tot stooktoestel)','2']];
 const fuel=j=>FUEL[j.km.brandstof]||'';
@@ -120,7 +133,7 @@ function setOK(p,x){const j=J(),o=j.verb[p.split('.')[0]],k=p.split('.')[1];if(p
 /* automatische keuring t.o.v. grenswaarden (CO max, rendement min): null = geen grenswaarde of nog geen meting */
 function auto(r,j=J()){const l=limit(r,j);if(!l)return null;const vals=cols(j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return null;
  return (l.max!=null&&Math.max(...vals)>l.max)||(l.min!=null&&Math.min(...vals)<l.min)?'nok':'ok'}
-function autoOK(j=J()){let bad=0;OKR.forEach(r=>{if(!rowsFor(j).some(x=>x[0]==r))return;const a=auto(r,j);if(a){j.verb.okNok[r]=a;if(a=='nok')bad=1}});if(bad)j.verb.werkt='nietgoed';return bad}
+function autoOK(j=J()){let bad=0;OKR.forEach(r=>{if(!rowsFor(j).some(x=>x[0]==r))return;const a=auto(r,j);if(a){j.verb.okNok[r]=a;if(a=='nok')bad=1}});if(bad)j.verb.werkt='nietgoed';rejDate(j);return bad}
 const OKBTN=(r,j)=>{const a=auto(r,j),v=j.verb.okNok[r];return `<button class="${v=='ok'?'y':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','ok')">OK</button><button class="${v=='nok'?'n':''}" ${a?'disabled':''} onclick="setOK('okNok.${r}','nok')">${v=='nok'&&a?'Afgekeurd':'Niet OK'}</button>`};
 const WERKT=j=>`<div id="werkt"><div class="tg" style="margin-bottom:8px">${[['goed','Goed'],['nietgoed','Niet goed']].map(([x,l])=>`<button class="${j.verb.werkt==x?'on':''}" onclick="pickv('verb.werkt','${x}')">${l}</button>`).join('')}</div>${OKR.some(r=>rowsFor(j).some(x=>x[0]==r)&&auto(r,j)=='nok')?'<div class="warn">Afgekeurd: CO boven '+esc(S.cfg.lim.coGas)+' mg/kWh en/of rendement onder '+esc(S.cfg.lim.hiGas)+' %. Eindbeoordeling automatisch op "niet goed".</div>':''}</div>`;
 function upOK(){const j=J();OKR.forEach(r=>{const e=$('#ok_'+r);if(e)e.innerHTML=OKBTN(r,j)});const w=$('#werkt');if(w)w.outerHTML=WERKT(j)}
@@ -145,7 +158,7 @@ function missing(j){const m=[],c=S.cfg,b=j.km.brandstof;
   OKR.filter(r=>rowsFor(j).some(x=>x[0]==r)).forEach(r=>{if(!j.verb.okNok[r])m.push('OK / Niet OK: '+ROWS.find(x=>x[0]==r)[1])});
   chkFor(j).forEach(x=>{if(!j.verb.checks[x[0]])m.push('Controle: '+x[1])});
   if(!j.verb.werkt||!j.verb.veilig)m.push('Eindbeoordeling goed/veilig');if(!j.volgV)m.push('Datum volgende verbrandingscontrole');
-  if(b!='vast'&&!j.tickets.length)m.push('Foto afdruk meettoestel (verplichte bijlage)')}
+  if(b!='vast'&&!j.tickP1.length)m.push('Foto meetticket Proef I (initiële meting)');if(b!='vast'&&(j.verb.laag||j.verb.hoog)&&!j.tickP2.length)m.push('Foto meetticket Proef II (eindmeting)')}
  if((j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig')&&!j.gebreken)m.push('Gebreken invullen (toestel niet goed/niet veilig)');
  if(!j.sig)m.push('Handtekening klant');return m}
 function fin(){const j=J(),m=missing(j);if(m.length&&!confirm('Nog niet volledig:\n\n• '+m.join('\n• ')+'\n\nToch afronden?'))return;
@@ -158,8 +171,10 @@ function upClient(j){const n=j.klant.n.trim();if(!n)return;let c=S.clients.find(
 
 /* ---------- foto's ---------- */
 function comp(f,max=1400,qq=.75){return new Promise(r=>{const i=new Image,u=URL.createObjectURL(f);i.onload=()=>{const k=Math.min(1,max/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);r(c.toDataURL('image/jpeg',qq))};i.onerror=()=>{URL.revokeObjectURL(u);r(null)};i.src=u})}
-async function addPh(inp,k){for(const f of inp.files){const d=await comp(f,k=='tickets'?1600:1000,k=='tickets'?.8:.7);if(d)J()[k].push(d)}inp.value='';save();R()}
+async function addPh(inp,k){const tk=k.startsWith('tick');for(const f of inp.files){const d=await comp(f,tk?1600:1000,tk?.8:.7);if(d)J()[k].push(d)}inp.value='';save();R()}
 function rmPh(k,i){J()[k].splice(i,1);save();R()}
+/* twee knoppen: camera rechtstreeks openen, of kiezen uit de galerij */
+const UP=k=>`<div class="row wrap"><label class="up">📷 Camera<input type="file" accept="image/*" capture="environment" hidden onchange="addPh(this,'${k}')"></label><label class="up">🖼 Galerij<input type="file" accept="image/*" multiple hidden onchange="addPh(this,'${k}')"></label></div>`;
 const PH=k=>`<div class="ph">${J()[k].map((f,i)=>`<div><img src="${f}" alt="Foto ${i+1}"><button onclick="rmPh('${k}',${i})">✕</button></div>`).join('')}</div>`;
 
 /* ---------- pdf ---------- */
@@ -172,7 +187,7 @@ function data(j,kind){const c=S.cfg,cs=cols(j),meet={};rowsFor(j).forEach(([r])=
  datum:j.datum,van:j.van,tot:j.tot,klant:{naam:j.klant.n,straat:j.klant.straat,postcode:j.klant.pc,tel:j.klant.tel,email:j.klant.mail},adresToestel:{anders:j.at.anders,naam:j.at.naam,straat:j.at.straat,postcode:j.at.pc},
  kenmerken:kmData(j),toestel:j.toestel,brander:j.brander,reiniging:rein,gebreken:j.gebreken,maatregelen:j.maatregelen,opmerkingen:j.opm,volgendeToestel:j.volgT,volgendeKanaal:j.volgK,volgende:j.volgV,
  verbranding:{laaglast:j.verb.laag,hooglast:j.verb.hoog,meet,okNok,checks,drukPa:j.verb.drukPa,werkt:j.verb.werkt,veilig:j.verb.veilig},handtekening:{tech:S.tsig,klant:j.sig},
- bijlagen:kind=='verb'?j.tickets.map((d,i)=>({titel:'Afdruk meettoestel'+(j.tickets.length>1?' '+(i+1):''),data:d})):[]}}
+ bijlagen:kind=='verb'?[...j.tickP1.map((d,i,a)=>({titel:'Afdruk meettoestel – Proef I: initiële meting'+(a.length>1?' ('+(i+1)+')':''),data:d})),...j.tickP2.map((d,i,a)=>({titel:'Afdruk meettoestel – Proef II: eindmeting'+[j.verb.laag&&' laaglast',j.verb.hoog&&' hooglast'].filter(Boolean).join(' +')+(a.length>1?' ('+(i+1)+')':''),data:d}))]:[]}}
 let LOGO;const logoBytes=async()=>LOGO||(LOGO=await(await fetch('logo.png')).arrayBuffer());
 const TPL={};async function tpl(k){if(!TPL[k])TPL[k]=await(await fetch(VETAttest.MAP[k].file)).arrayBuffer();return TPL[k]}
 const safe=s=>String(s).replace(/[\\/:*?"<>|]/g,'-');
@@ -268,7 +283,8 @@ ${j.at.anders?`<div class="sub">${F('at.naam','Naam / gebouw (optioneel)')}${F('
 <div class="c"><h2>Kenmerken van het stooktoestel</h2>${oilBlocked?'<div class="warn">Geen TV-erkenningsnummer ingesteld. Attesten voor stookolie mag enkel een erkend technicus vloeibare brandstof opmaken; de pdf wordt geblokkeerd.</div>':''}
 <div class="cks" style="margin-bottom:10px">${CH('km.centraal','Centraal stooktoestel')}</div>
 <h3>Aansluiting (NBN CR 1749)</h3>${SEG('km.aansl',[['B','Type B (open)'],['C','Type C (gesloten)']])}
-${j.km.aansl?`<div style="margin-top:8px">${F('km.code','Exacte indeling, bv. '+(j.km.aansl=='B'?'B23':'C13, C33, C43'))}</div>`:''}
+<button class="b2" style="margin-top:8px;width:100%" onclick="SCHOUW.show(J().km.aansl,pickCode)">📖 Overzicht schouwaansluitingen (met tekening)</button>
+${j.km.aansl?`<div class="cks" style="margin-top:8px">${SCHOUW.codes(j.km.aansl).map(c=>`<button class="ck ${j.km.code==c?'on':''}" onclick="pickCode('${c}')">${c}</button>`).join('')}</div><div style="margin-top:8px">${F('km.code','Exacte indeling (of zelf invullen)')}</div>`:''}
 <h3>Brandstof</h3>${SEG('km.brandstof',[['gas','Gas'],['vloeibaar','Stookolie'],['vast','Vast']])}
 ${b=='gas'?`<h3>Gas</h3>${SEG('km.gassoort',[['aardgas','Aardgas'],['lpg','LPG'],['andere','Andere']])}${j.km.gassoort=='andere'?`<div style="margin-top:8px">${F('km.gasAndereTxt','Andere, namelijk')}</div>`:''}
 <h3>Brander</h3>${SEG('km.branderType',[['nietpremix','Niet-premix (GI)'],['premix','Premix (GI)'],['ventilator','Ventilatorbrander (GII)']])}`:''}
@@ -292,14 +308,16 @@ ${!b?'<p class="mu" style="margin-top:12px">Kies eerst de brandstof: dan verschi
 <h3>Goede staat van werking</h3><p class="mu" style="margin:-4px 0 8px">Proef I = initiële meting. Proef II = eindmeting: duid aan welke meetreeksen.</p>
 ${rs.length?`<div class="cks" style="margin-bottom:8px">${CH('verb.laag','Proef II laaglast')}${CH('verb.hoog','Proef II hooglast')}</div>
 <table class="mt"><tr><th></th><th>Proef I</th>${j.verb.laag?'<th>Laag</th>':''}${j.verb.hoog?'<th>Hoog</th>':''}</tr>
-${rs.map(([r,lb,u,,t])=>`<tr><td>${lb}<small>${u}${OKR.includes(r)?` <span class="hint" id="h_${r}">${hint(r,j)}</span>`:''}</small></td>${cs.map(c=>`<td class="v"><input id="m_${r}_${c}" ${t?'':'inputmode="decimal"'} value="${esc(j.verb.meet[r]?.[c]??'')}" oninput="setM('${r}','${c}',this.value)"></td>`).join('')}</tr>
+${rs.map(([r,lb,u,,t])=>`<tr><td>${lb}<small>${u}${r=='gasTeller'?'<br><span style="color:var(--ac)">'+gasHint(j)+'</span>':''}${OKR.includes(r)?` <span class="hint" id="h_${r}">${hint(r,j)}</span>`:''}</small></td>${cs.map(c=>`<td class="v"><input id="m_${r}_${c}" ${t?'':'inputmode="decimal"'} value="${esc(j.verb.meet[r]?.[c]??'')}" oninput="setM('${r}','${c}',this.value)"></td>`).join('')}</tr>
 ${OKR.includes(r)?`<tr class="nb"><td colspan="${cs.length+1}" style="border-top:0;padding-top:0"><div class="on3" id="ok_${r}">${OKBTN(r,j)}</div></td></tr>`:''}`).join('')}</table>`:'<p class="mu">Voor vaste brandstof staan geen meetwaarden op het attest.</p>'}
 <h3>Controles</h3>${chkFor(j).map(([k,lb])=>`<div class="chk"><span>${lb}${k=='drukRga'?`<input inputmode="decimal" placeholder="Pa" style="width:90px;margin:6px 0 0;display:block" value="${esc(j.verb.drukPa)}" oninput="set('verb.drukPa',this.value)">`:''}</span><div class="on3"><button class="${j.verb.checks[k]=='ok'?'y':''}" onclick="setOK('checks.${k}','ok')">OK</button><button class="${j.verb.checks[k]=='nok'?'n':''}" onclick="setOK('checks.${k}','nok')">Niet OK</button></div></div>`).join('')}
 <h3>Eindbeoordeling – het stooktoestel werkt</h3>${WERKT(j)}
 <div class="tg">${[['veilig','Veilig'],['nietveilig','Niet veilig']].map(([x,l])=>`<button class="${j.verb.veilig==x?'on':''}" onclick="pickv('verb.veilig','${x}')">${l}</button>`).join('')}</div>
-${j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig'?'<div class="warn" style="margin-top:10px">Gebreken moeten binnen 3 maanden hersteld worden, met een nieuw attest als bewijs. Vul de gebreken hieronder in en laat de klant tekenen.</div>':''}
-<h3>Eerstvolgende verbrandingscontrole vóór</h3>${F('volgV','Datum','date')}
-${b!='vast'?`<h3>Afdruk(ken) meettoestel</h3><p class="mu" style="margin:-4px 0 8px">Verplicht bij het attest. Neem een foto van het meetticket: die komt als bijlage achter het verbrandingsattest.</p><label class="up">📷 Foto meetticket toevoegen<input type="file" accept="image/*" multiple hidden onchange="addPh(this,'tickets')"></label>${PH('tickets')}`:''}`}</div>`:''}
+${j.verb.werkt=='nietgoed'||j.verb.veilig=='nietveilig'?'<div class="warn" style="margin-top:10px">Gebreken moeten binnen 3 maanden hersteld worden, met een nieuw attest als bewijs. De volgende verbrandingscontrole is automatisch op +3 maanden gezet. Vul de gebreken hieronder in en laat de klant tekenen.</div>':''}
+<h3>Eerstvolgende verbrandingscontrole vóór</h3>${F('volgV','Datum','date','id="volgV"')}${isRej(j)?'<p class="hint" style="margin:-4px 0 8px">Afgekeurd: automatisch op datum onderhoud + 3 maanden gezet (wettelijke hersteltermijn).</p>':''}
+${b!='vast'?`<h3>Afdruk(ken) meettoestel</h3><p class="mu" style="margin:-4px 0 8px">Verplicht bij het attest. De foto's komen als laatste bijlage in de pdf, apart per proef.</p>
+<div class="sub" style="border:0;margin-top:0;padding-top:0"><b style="font-size:14px">Proef I – initiële meting</b><div style="margin-top:6px">${UP('tickP1')}</div>${PH('tickP1')}</div>
+<div class="sub"><b style="font-size:14px">Proef II – eindmeting${j.verb.laag||j.verb.hoog?' ('+[j.verb.laag&&'laaglast',j.verb.hoog&&'hooglast'].filter(Boolean).join(' + ')+')':''}</b><div style="margin-top:6px">${UP('tickP2')}</div>${PH('tickP2')}</div>`:''}`}</div>`:''}
 
 <div class="c"><h2>Gebreken en maatregelen</h2>
 <label class="f"><span>Gebreken die niet door de onderhouds-/reinigingsbeurt kunnen worden weggewerkt</span><textarea oninput="set('gebreken',this.value)">${esc(j.gebreken)}</textarea></label>
@@ -307,7 +325,7 @@ ${j.att.rein?`<label class="f"><span>Te treffen maatregelen om deze gebreken weg
 <label class="f"><span>Andere opmerkingen</span><textarea oninput="set('opm',this.value)">${esc(j.opm)}</textarea></label>
 <p class="mu" style="margin:0">Te lange tekst komt volledig in een bijlage achter het attest.</p></div>
 
-<div class="c"><h2>Foto's installatie</h2><p class="mu" style="margin:-4px 0 8px">Enkel voor je eigen dossier, niet op het attest.</p><label class="up">📷 Foto's toevoegen<input type="file" accept="image/*" multiple hidden onchange="addPh(this,'fotos')"></label>${PH('fotos')}</div>
+<div class="c"><h2>Foto's installatie</h2><p class="mu" style="margin:-4px 0 8px">Enkel voor je eigen dossier, niet op het attest.</p>${UP('fotos')}${PH('fotos')}</div>
 
 <div class="c"><h2>Handtekening klant – voor kennisname</h2>${!S.tsig?'<div class="warn">Je eigen handtekening ontbreekt nog: stel ze in bij Instellingen.</div>':''}<canvas id="sg"></canvas><button class="b2" style="margin-top:8px" onclick="clrSig()">Wissen</button></div>
 
@@ -331,5 +349,5 @@ const sigT=()=>initSig('sg2',()=>S.tsig,x=>{S.tsig=x;sv()});
 function R(){$('#app').innerHTML=v=='list'?VL():v=='set'?VS():v=='cd'?VC():VJ();if(v=='job')sigO();if(v=='set')sigT()}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 navigator.storage?.persist?.();
-load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});if(!S.cfg.limV){S.cfg.lim=Object.assign({},S.cfg.lim,{coGas:'150',coOlie:'150',hiGas:'90',hiOlie:'90'});S.cfg.limV=1;save()}R()});
+load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.jobs.forEach(j=>{if(j.tickets){j.tickP1=(j.tickP1||[]).concat(j.tickets);delete j.tickets}j.tickP1=j.tickP1||[];j.tickP2=j.tickP2||[]});S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});if(!S.cfg.limV){S.cfg.lim=Object.assign({},S.cfg.lim,{coGas:'150',coOlie:'150',hiGas:'90',hiOlie:'90'});S.cfg.limV=1;save()}R()});
 </script></body></html>
