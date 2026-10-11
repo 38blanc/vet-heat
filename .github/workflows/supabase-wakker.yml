@@ -3,6 +3,8 @@ on:
   schedule:
     - cron: '17 6 * * *'   # elke dag rond 8u17 (Belgische tijd)
   workflow_dispatch:
+permissions:
+  contents: write          # nodig voor de lege commit
 jobs:
   ping:
     runs-on: ubuntu-latest
@@ -11,3 +13,16 @@ jobs:
         run: |
           curl -fsS "https://pfxxzzdyzitcuhfrxaiq.supabase.co/rest/v1/docs?select=id&limit=1" \
             -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHh6emR5eml0Y3VoZnJ4YWlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MTY3NjYsImV4cCI6MjEwNzI5Mjc2Nn0.yQFcLi4G3z4A60LgJdtUvAqYtGtC_IqMU6hxOaZws8I"
+
+      - name: Repo actief houden (lege commit na 45 dagen stilte)
+        uses: actions/checkout@v4
+      - run: |
+          laatste=$(git log -1 --format=%ct)
+          dagen=$(( ( $(date +%s) - laatste ) / 86400 ))
+          echo "Laatste commit: $dagen dagen geleden"
+          if [ "$dagen" -ge 45 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Automatisch: repo actief houden"
+            git push
+          fi
