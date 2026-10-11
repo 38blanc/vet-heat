@@ -1,0 +1,13 @@
+name: Supabase wakker houden
+on:
+  schedule:
+    - cron: '17 6 * * *'   # elke dag rond 8u17 (Belgische tijd)
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping database
+        run: |
+          curl -fsS "https://pfxxzzdyzitcuhfrxaiq.supabase.co/rest/v1/docs?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmeHh6emR5eml0Y3VoZnJ4YWlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MTY3NjYsImV4cCI6MjEwNzI5Mjc2Nn0.yQFcLi4G3z4A60LgJdtUvAqYtGtC_IqMU6hxOaZws8I"
