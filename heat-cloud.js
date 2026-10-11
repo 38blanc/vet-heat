@@ -13,6 +13,8 @@ const CLOUD = VETSync.create({
     S.clients.forEach((c) => out.push({ app: 'shared', kind: 'client', id: c.id, data: toShared(c) }));
     out.push({ app: 'heat', kind: 'settings', id: 'main', data: { cfg: S.cfg, seq: S.seq, tsig: S.tsig || '' } });
     (S.outbox || []).forEach((o) => out.push({ app: 'work', kind: 'order', id: o.id, data: o }));
+    // VEKA-status gedeeld met VET Office
+    S.jobs.filter((j) => j.veka).forEach((j) => out.push({ app: 'shared', kind: 'veka', id: j.id, data: { ok: !!j.veka.ok, d: j.veka.d || '' } }));
     return out;
   },
   async apply(rows) {
@@ -35,6 +37,8 @@ const CLOUD = VETSync.create({
         }
         Object.assign(c, { n: d.n || '', straat: sp.straat, pc: sp.pc, tel: d.tel || '', mail: d.mail || '' });
         if (d.inst) c.inst = d.inst;
+      } else if (r.kind === 'veka') {
+        const j = S.jobs.find((x) => x.id === r.id); if (j && !r.deleted) { j.veka = { ok: !!r.data.ok, d: r.data.d || '' }; if (j.id === cur) curChanged = true; }
       } else if (r.kind === 'settings' && !r.deleted) {
         const d = r.data || {};
         if (d.cfg) S.cfg = Object.assign(S.cfg, d.cfg);
@@ -92,6 +96,18 @@ function makeWerkbon() {
   S.outbox = (S.outbox || []).concat(o); j.wb = { id: o.id, d: today() }; save(); R(); CLOUD.sync();
   alert('Werkbon klaargezet voor VET Work. Open VET Work: hij verschijnt bij de open werkbonnen.');
 }
+/* ---------- attesten naar VET Office (samen met de werkbon factureren) ---------- */
+async function naarOffice(id, stil) {
+  const j = id ? S.jobs.find((x) => x.id === id) : J();
+  if (!CLOUD.session()) { if (!stil) alert('Log eerst in bij Cloud (Instellingen) om naar VET Office te sturen.'); return; }
+  const file = await new Promise((res) => { window._vang = res; setTimeout(() => { if (window._vang === res) { window._vang = null; res(null); } }, 30000); pdf(j.id, 'beide'); });
+  if (!file) return;
+  const data = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+  j.office = { pdf: data, nm: file.name, d: new Date().toISOString() }; await save(); R(); CLOUD.sync();
+  if (!stil) alert('Attest(en) naar VET Office gestuurd. Ze staan daar samen met de werkbon klaar om te factureren.');
+}
+// bij "Onderhoud afronden" de attesten automatisch naar VET Office sturen
+if (typeof fin === 'function') { const _fin = fin; window.fin = function () { _fin.apply(this, arguments); setTimeout(() => { const j = J(); if (j && j.status === 'afgewerkt' && CLOUD.session() && !j.office) naarOffice(j.id, true); }, 600); }; }
 // beschikbaar maken voor index.html (const/let staan niet op window)
-Object.assign(window, { CLOUD, CLOUDST, CLOUDCARD });
+Object.assign(window, { CLOUD, CLOUDST, CLOUDCARD, naarOffice });
 if (typeof R === 'function' && typeof v !== 'undefined' && (v === 'list' || v === 'set')) try { R(); } catch (e) {}
