@@ -60,7 +60,7 @@ let v='list',cur=null,saveT,tab='open',q='',ren=0,pdfK=0,vsub='te';
 const db=new Promise(r=>{try{const x=indexedDB.open('vetheat',1);x.onupgradeneeded=()=>x.result.createObjectStore('kv');x.onsuccess=()=>r(x.result);x.onerror=()=>r(null)}catch(e){r(null)}});
 async function load(){const d=await db;if(!d){try{const x=localStorage.getItem('vetheat');if(x)S=JSON.parse(x)}catch(e){}return}
  return new Promise(r=>{const x=d.transaction('kv').objectStore('kv').get('s');x.onsuccess=()=>{if(x.result)S=x.result;r()};x.onerror=()=>r()})}
-async function save(){const d=await db;if(!d){try{localStorage.setItem('vetheat',JSON.stringify(S))}catch(e){}return}d.transaction('kv','readwrite').objectStore('kv').put(S,'s')}
+async function save(fromCloud){if(!fromCloud&&window.CLOUD)CLOUD.soon();const d=await db;if(!d){try{localStorage.setItem('vetheat',JSON.stringify(S))}catch(e){}return}d.transaction('kv','readwrite').objectStore('kv').put(S,'s')}
 const sv=()=>{clearTimeout(saveT);saveT=setTimeout(save,300)};
 const J=()=>S.jobs.find(j=>j.id==cur);
 const dt=d=>d?new Date(d).toLocaleDateString('nl-BE'):'';
@@ -85,7 +85,7 @@ const SEG=(p,opts)=>`<div class="tg">${opts.map(([x,l])=>`<button class="${gv(p)
 
 /* ---------- onderhoud ---------- */
 function blank(){return{id:Date.now().toString(36),nr:'',status:'open',att:{rein:true,verb:true},cid:'',klant:{n:'',straat:'',pc:'',tel:'',mail:''},at:{anders:false,naam:'',straat:'',pc:''},datum:today(),van:'',tot:'',run:0,
- km:{centraal:true,aansl:'',code:'',brandstof:'',gassoort:'',gasAndereTxt:'',branderType:'',vastSoort:'',vastAndereTxt:''},toestel:{merk:'',type:'',bouwjaar:'',serie:'',vermogen:''},brander:{merk:'',type:'',bouwjaar:'',serie:'',debiet:''},
+ km:{centraal:true,verw:'individueel',aansl:'',code:'',brandstof:'',gassoort:'',gasAndereTxt:'',branderType:'',vastSoort:'',vastAndereTxt:''},toestel:{merk:'',type:'',bouwjaar:'',serie:'',vermogen:''},brander:{merk:'',type:'',bouwjaar:'',serie:'',debiet:''},
  rol:'erkend',rein:{},verb:{soort:'onderhoud',laag:false,hoog:false,meet:{},tnetMan:{},okNok:{},checks:{},drukPa:'',werkt:'',veilig:''},gebreken:'',maatregelen:'',opm:'',volgT:'',volgK:'',volgV:'',tickP1:[],tickP2:[],fotos:[],sig:'',sigT:0}}
 function newJ(cid){const j=blank(),y=new Date().getFullYear();j.nr=(S.cfg.prefix||'VH')+'-'+y+'-'+String(++S.seq).padStart(4,'0');
  const c=cid&&S.clients.find(c=>c.id==cid);if(c)fillFromClient(j,c);S.jobs.unshift(j);save();go('job',j.id)}
@@ -101,7 +101,7 @@ function rejDate(j=J()){if(!j.datum)return;const r=addM(j.datum,3);
  if(isRej(j)){if(!j.rej){j.volgVprev=j.volgV;j.rej=1}j.volgV=r}
  else if(j.rej){j.rej=0;const y=S.cfg.int[j.km.brandstof];j.volgV=j.volgVprev&&j.volgVprev!=r?j.volgVprev:(y?addY(j.datum,y):'')}
  const e=$('#volgV');if(e&&e.value!=j.volgV)e.value=j.volgV}
-function delJ(){if(confirm('Dit onderhoud definitief verwijderen?')){S.jobs=S.jobs.filter(j=>j.id!=cur);save();go('list')}}
+function delJ(){if(confirm('Dit onderhoud definitief verwijderen?')){S.jobs=S.jobs.filter(j=>j.id!=cur);window.CLOUD&&CLOUD.markDeleted('heat','job',cur);save();go('list')}}
 function saveRn(){const t=$('#rnm').value.trim();if(t)J().nr=t;ren=0;save();R()}
 function clock(){const j=J();if(j.run){j.tot=hhmm();j.run=0}else{j.van=hhmm();j.tot='';j.run=1}save();R()}
 function allRein(){const j=J(),b=j.km.brandstof,ks=['vegen','nazicht','terugslag','verluchting','dichtheid'].concat(b=='gas'?['gasOntstoffing','gasBranderbedden','gasVentilator']:b=='vloeibaar'?['olFilters','olKetel','olBrander']:b=='vast'?['vastNazicht','vastReiniging']:[]);
@@ -259,24 +259,35 @@ const VEKA_URL='https://melding.veka.vlaanderen.be';
 const vekaOpen=j=>j.status=='afgewerkt'&&!(j.veka&&j.veka.ok);
 const vekaLeft=j=>30-Math.round((new Date(today())-new Date(j.datum))/864e5);
 const vekaTag=j=>{if(!vekaOpen(j))return j.veka&&j.veka.ok?'<span class="tag d">VEKA ✓</span>':'';const n=vekaLeft(j);return `<span class="tag ${n<0?'r':n<=7?'w':''}">VEKA ${n<0?'te laat ('+(-n)+' d)':'nog '+n+' d'}</span>`};
-function vekaFields(j){const c=S.cfg,k=j.km,at=j.at.anders?j.at:{straat:j.klant.straat,pc:j.klant.pc},pc=(at.pc||'').match(/^\s*(\d{4})\s*(.*)$/)||[];
+/* VEKA-formulier (handleiding feb. 2025): stap 4 gegevens activiteit, stap 5 kenmerken stooktoestel, stap 6 eindbeoordeling.
+   Gemeente = hoofdgemeente (bv. Wilrijk -> Antwerpen); straatnaam, huisnummer en busnummer apart. */
+const HOOFD={'2000':'Antwerpen','2018':'Antwerpen','2020':'Antwerpen','2030':'Antwerpen','2040':'Antwerpen','2050':'Antwerpen','2060':'Antwerpen','2100':'Antwerpen','2140':'Antwerpen','2170':'Antwerpen','2180':'Antwerpen','2600':'Antwerpen','2610':'Antwerpen','2660':'Antwerpen'};
+function splitAdres(st){const m=String(st||'').trim().match(/^(.*?)[\s,]+(\d+[A-Za-z]?)(?:\s*(?:bus|bte|b\.?|\/)\s*([\w.-]+))?\s*$/i);return m?{straat:m[1],nr:m[2],bus:m[3]||''}:{straat:st||'',nr:'',bus:''}}
+function vekaFields(j){const c=S.cfg,k=j.km,at=j.at.anders?j.at:{straat:j.klant.straat,pc:j.klant.pc},pc=(at.pc||'').match(/^\s*(\d{4})\s*(.*)$/)||[],a=splitAdres(at.straat);
+ const gem=HOOFD[pc[1]]||pc[2]||at.pc||'',deel=pc[2]&&HOOFD[pc[1]]&&pc[2].toLowerCase()!=HOOFD[pc[1]].toLowerCase()?' (deelgemeente '+pc[2]+')':'';
  const br={gas:'Gas – '+({aardgas:'aardgas',lpg:'LPG',andere:k.gasAndereTxt||'andere'}[k.gassoort]||''),vloeibaar:'Stookolie (vloeibaar)',vast:'Vaste brandstof – '+({pellets:'houtpellets',blokken:'houtblokken',andere:k.vastAndereTxt||'andere'}[k.vastSoort]||'')}[k.brandstof]||'';
- return [['Soort activiteit',j.verb.soort=='keuring'?'Keuring vóór eerste ingebruikname':'Periodiek onderhoud'],['Datum activiteit',dt(j.datum)],
- ['Straat en nummer',at.straat],['Postnummer',pc[1]||''],['Gemeente',pc[2]||at.pc],['Klant',j.klant.n],
- ['Brandstof',br.replace(/ – $/,'')],['Type toestel',k.aansl?'Type '+k.aansl+(k.code?' ('+k.code+')':''):''],['Merk',j.toestel.merk],['Type / model',j.toestel.type],['Fabricatienummer',j.toestel.serie],['Bouwjaar',j.toestel.bouwjaar],['Nominaal vermogen (kW)',j.toestel.vermogen],
+ return [['#','Stap 4 – Gegevens activiteit'],['Type activiteit',j.verb.soort=='keuring'?'Keuring voor eerste ingebruikname':'Onderhoud'],['Datum activiteit',dt(j.datum)],
+ ['Type verwarming',{individueel:'Individueel',collectief:'Collectief',onbekend:'Onbekend'}[k.verw||'individueel']],
+ ['Gemeente (hoofdgemeente)',gem,deel],['Postcode',pc[1]||''],['Straatnaam',a.straat],['Huisnummer',a.nr],['Busnummer',a.bus],
+ ['#','Stap 5 – Kenmerken stooktoestel'],['Brandstof',br.replace(/ – $/,'')],['Type toestel',k.aansl?'Type '+k.aansl+(k.code?' ('+k.code+')':''):''],['Merk',j.toestel.merk],['Type / model',j.toestel.type],['Fabricatienummer',j.toestel.serie],['Bouwjaar',j.toestel.bouwjaar],['Nominaal vermogen (kW)',j.toestel.vermogen],
  ['Brander merk/type',[j.brander.merk,j.brander.type].filter(Boolean).join(' ')],
- ['Eindbeoordeling',[{goed:'Werkt goed',nietgoed:'Werkt niet goed'}[j.verb.werkt],{veilig:'veilig',nietveilig:'niet veilig'}[j.verb.veilig]].filter(Boolean).join(', ')],
- ['Erkenningsnummer',[c.tech.gv,c.tech.tv].filter(Boolean).join(' / ')],['Volgnummer attest',j.nr]].filter(x=>x[1])}
+ ['#','Stap 6 – Eindbeoordeling'],['Het toestel werkt',[{goed:'goed',nietgoed:'niet goed'}[j.verb.werkt],{veilig:'veilig',nietveilig:'niet veilig'}[j.verb.veilig]].filter(Boolean).join(' en ')],
+ ['Uitvoerder','Schuifje naar rechts: ik ben de erkend technicus ('+[c.tech.gv,c.tech.tv].filter(Boolean).join(' / ')+')'],['Opmerking (optioneel)','Volgnummer attest '+j.nr]].filter(x=>x[0]=='#'||x[1])}
+/* VEKA openen in de echte browser (in het app-venster gaat het inloggen met itsme mis) */
+const STANDALONE=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function openVeka(){const u=VEKA_URL+'/';if(!STANDALONE())return window.open(u,'_blank','noopener');
+ if(IOS)location.href='x-safari-'+u;else if(/Android/i.test(navigator.userAgent))location.href='intent://'+u.replace(/^https:\/\//,'')+'#Intent;scheme=https;end';else window.open(u,'_blank','noopener')}
 async function cp(t,el){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}if(el){const o=el.innerHTML;el.innerHTML='✓ gekopieerd';setTimeout(()=>el.innerHTML=o,900)}}
-function cpAll(el){cp(vekaFields(J()).map(([a,b])=>a+': '+b).join('\n'),el)}
+function cpAll(el){cp(vekaFields(J()).map(([a,b])=>a=='#'?'\n'+b:a+': '+b).join('\n').trim(),el)}
 function vekaSet(ok){const j=J();j.veka={ok,d:ok?today():''};save();R()}
 const VEKA=j=>{if(j.status!='afgewerkt')return'';const ok=j.veka&&j.veka.ok,n=vekaLeft(j);
  return `<div class="c" id="veka"><div class="top"><h2 style="margin:0">Melding bij VEKA</h2>${vekaTag(j)}</div>
 ${ok?`<p style="margin:10px 0">✓ Gemeld op ${dt(j.veka.d)}.</p><button class="b2" onclick="if(confirm('Deze melding terug op \'niet gemeld\' zetten?'))vekaSet(false)">Toch niet gemeld</button>`:`
 <p class="mu" style="margin:8px 0">Verplicht binnen 30 dagen na het onderhoud (uiterlijk ${dt(new Date(new Date(j.datum).getTime()+30*864e5))}). Tik op een waarde om ze te kopiëren en plak ze in het VEKA-formulier.</p>
-<div class="row wrap" style="margin-bottom:10px"><a class="up" style="text-decoration:none;background:var(--ac);color:#fff" href="${VEKA_URL}" target="_blank" rel="noopener">Open VEKA-melding ↗</a><button class="b2" onclick="cpAll(this)">Kopieer alles</button></div>
-${vekaFields(j).map(([a,b])=>`<div class="chk" style="cursor:pointer" onclick="cp(${esc(JSON.stringify(b))},this.querySelector('b'))"><span class="mu" style="flex:0 0 40%">${a}</span><b style="font-weight:600;text-align:right;flex:1;overflow-wrap:anywhere">${esc(b)}</b></div>`).join('')}
-<p class="mu" style="margin:10px 0">Het attest als bijlage is optioneel. Gebruik de pdf-knop hieronder om het te bewaren of te delen.</p>
+<div class="row wrap" style="margin-bottom:10px"><button onclick="openVeka()">Open VEKA in browser ↗</button><button class="b2" onclick="cp(VEKA_URL,this)">Kopieer link</button><button class="b2" onclick="cpAll(this)">Kopieer alles</button></div>
+<p class="mu" style="margin:-2px 0 8px;font-size:13px">Opent in Safari/Chrome (niet in de app), anders lukt inloggen met itsme niet. Werkt de knop niet: kopieer de link en plak hem in je browser.</p>
+${vekaFields(j).map(([a,b,x])=>a=='#'?`<h3 style="margin:14px 0 2px">${b}</h3>`:a=='Uitvoerder'?`<div class="chk"><span class="mu" style="flex:0 0 40%">${a}</span><span style="text-align:right;flex:1">${esc(b)}</span></div>`:`<div class="chk" style="cursor:pointer" onclick="cp(${esc(JSON.stringify(b))},this.querySelector('b'))"><span class="mu" style="flex:0 0 40%">${a}</span><b style="font-weight:600;text-align:right;flex:1;overflow-wrap:anywhere">${esc(b)}${x?`<small class="mu" style="display:block;font-weight:400">${esc(x)}</small>`:''}</b></div>`).join('')}
+<p class="mu" style="margin:10px 0">Duid daarna het gebouw aan op de kaart van VEKA. Een attest opladen kan bij VEKA niet meer.</p>
 <button class="ok" style="width:100%" onclick="vekaSet(true)">✓ Gemeld bij VEKA</button>`}</div>`};
 
 /* ---------- lijsten ---------- */
@@ -284,7 +295,7 @@ const due=j=>[j.att.verb&&j.volgV,j.att.rein&&j.volgT,j.att.rein&&j.volgK].filte
 const days=d=>Math.round((new Date(d)-new Date(today()))/864e5);
 const dueTag=d=>{if(!d)return'';const n=days(d);return n<0?`<span class="tag r">Vervallen ${dt(d)}</span>`:n<=60?`<span class="tag w">Vóór ${dt(d)}</span>`:`<span class="tag">Vóór ${dt(d)}</span>`};
 const atts=j=>[j.att.verb&&'Verbranding',j.att.rein&&'Reiniging'].filter(Boolean).join(' + ');
-const row=j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · ${dt(j.datum)} · ${atts(j)}</div><div class="mu">${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div class="row" style="flex-direction:column;align-items:flex-end;gap:6px">${j.run?'<span class="tag r">Loopt</span>':''}${vekaTag(j)}${j.status=='afgewerkt'?`<button class="b2" onclick="event.stopPropagation();pdf('${j.id}')">⬇ PDF</button>`:''}</div></div>`;
+const row=j=>`<div class="item" onclick="go('job','${j.id}')"><div><b>${esc(j.klant.n)||'Zonder klantnaam'}</b><div class="mu">${esc(j.nr)} · ${dt(j.datum)} · ${atts(j)}</div><div class="mu">${esc([j.toestel.merk,j.toestel.type].filter(Boolean).join(' '))}</div></div><div class="row" style="flex-direction:column;align-items:flex-end;gap:6px">${j.run?'<span class="tag r">Loopt</span>':''}${vekaTag(j)}${j.wb?'<span class="tag">Werkbon ✓</span>':''}${j.status=='afgewerkt'?`<button class="b2" onclick="event.stopPropagation();pdf('${j.id}')">⬇ PDF</button>`:''}</div></div>`;
 const jobsOf=c=>S.jobs.filter(j=>j.cid==c.id||(!j.cid&&j.klant.n.trim().toLowerCase()==c.n.trim().toLowerCase()));
 function follow(){return S.clients.map(c=>{const h=jobsOf(c).filter(j=>j.status=='afgewerkt').sort((a,b)=>b.datum.localeCompare(a.datum));return h[0]?{c,j:h[0],d:due(h[0])}:null}).filter(x=>x&&x.d).sort((a,b)=>a.d.localeCompare(b.d))}
 function LST(){const k=q.trim().toLowerCase();
@@ -300,9 +311,9 @@ function LST(){const k=q.trim().toLowerCase();
  let m='';return a.map(j=>{const h=j.datum?new Date(j.datum).toLocaleDateString('nl-BE',{month:'long',year:'numeric'}):'Zonder datum',t=h!=m?`<h2 style="margin-top:12px">${h}</h2>`:'';m=h;return t+row(j)}).join('')||'<p class="mu">Geen afgeronde onderhouden gevonden.</p>'}
 const fl=()=>{const e=$('#lst');if(e)e.innerHTML=LST()};
 function VL(){const n=S.jobs.filter(j=>j.status=='afgewerkt').length,soon=follow().filter(x=>days(x.d)<=60).length;
- return `<img class="lg" src="logo-app.png" alt="Van Eyen Technics"><div class="top"><h1>VET Heat</h1><button class="b2" onclick="go('set')">Instellingen</button></div>
+ return `<img class="lg" src="logo-app.png" alt="Van Eyen Technics"><div class="top"><h1>VET Heat</h1><button class="b2" onclick="go('set')">Instellingen</button></div>${window.CLOUDST?`<div style="margin:-6px 0 10px">${CLOUDST()}</div>`:''}
 <button style="width:100%;margin-bottom:12px;padding:14px" onclick="newJ()">+ Nieuw onderhoud</button>
-${S.jobs.length&&(!S.bk||Date.now()-S.bk>12096e5)?`<p class="mu" style="cursor:pointer" onclick="go('set')">⚠ Maak een back-up (Instellingen)${S.bk?' · laatste: '+dt(S.bk):''}</p>`:''}
+${!(window.CLOUD&&CLOUD.session())&&S.jobs.length&&(!S.bk||Date.now()-S.bk>12096e5)?`<p class="mu" style="cursor:pointer" onclick="go('set')">⚠ Maak een back-up (Instellingen)${S.bk?' · laatste: '+dt(S.bk):''}</p>`:''}
 ${(()=>{const u=S.jobs.filter(j=>vekaOpen(j)&&vekaLeft(j)<=3);if(!u.length||tab=='veka')return'';const m=Math.min(...u.map(vekaLeft));return `<div class="warn" style="cursor:pointer;${m<0?'background:var(--rd);color:#fff':''}" onclick="tab='veka';vsub='te';q='';R()">📨 ${u.length} VEKA-melding${u.length>1?'en':''} ${m<0?'te laat!':'dringend: nog '+m+' dag'+(m==1?'':'en')} ›</div>`})()}
 ${!S.tsig?`<div class="warn" style="cursor:pointer" onclick="go('set')">Stel eerst je handtekening en erkenningsnummer in bij Instellingen.</div>`:''}
 <div class="tg tabs" style="margin-bottom:12px"><button class="${tab=='open'?'on':''}" onclick="tab='open';q='';R()">Open</button><button class="${tab=='af'?'on':''}" onclick="tab='af';q='';R()">Afgerond</button><button class="${tab=='op'?'on':''}" onclick="tab='op';q='';R()">Opvolging</button><button class="${tab=='kl'?'on':''}" onclick="tab='kl';q='';R()">Klanten</button>${(()=>{const o=S.jobs.filter(vekaOpen),late=o.some(j=>vekaLeft(j)<0);return `<button class="${tab=='veka'?'on':''}" style="${late&&tab!='veka'?'background:var(--rd);color:#fff':''}" onclick="tab='veka';q='';R()">VEKA${o.length?` (${o.length})`:''}</button>`})()}</div>
@@ -314,7 +325,7 @@ ${tab=='kl'?'<button class="b2" style="width:100%;margin-bottom:10px" onclick="n
 const C=()=>S.clients.find(c=>c.id==cur);
 function newC(){const c={id:'c'+Date.now().toString(36),n:'',straat:'',pc:'',tel:'',mail:''};S.clients.push(c);save();go('cd',c.id)}
 function setC(k,x){C()[k]=x;sv()}
-function delC(){if(confirm('Deze klant verwijderen? Bestaande onderhouden blijven bewaard.')){S.clients=S.clients.filter(c=>c.id!=cur);save();go('list')}}
+function delC(){if(confirm('Deze klant verwijderen? Bestaande onderhouden blijven bewaard.')){S.clients=S.clients.filter(c=>c.id!=cur);window.CLOUD&&CLOUD.markDeleted('shared','client',cur);save();go('list')}}
 function VC(){const c=C(),h=jobsOf(c).sort((a,b)=>b.datum.localeCompare(a.datum)),i=c.inst;
  return `<div class="top"><button class="b2" onclick="go('list')">← Terug</button><button class="red" onclick="delC()">Verwijderen</button></div><h1>Klant</h1>
 <div class="c"><label class="f"><span>Voornaam en achternaam</span><input value="${esc(c.n)}" oninput="setC('n',this.value)"></label><label class="f"><span>Straat en nummer</span><input value="${esc(c.straat)}" oninput="setC('straat',this.value)"></label><label class="f"><span>Postnummer en gemeente</span><input value="${esc(c.pc)}" oninput="setC('pc',this.value)"></label>
@@ -335,6 +346,8 @@ async function imp(inp){try{const d=JSON.parse(await inp.files[0].text());
  else throw 0;go('list')}catch(e){alert('Dit bestand is geen geldige back-up.')}inp.value=''}
 function clrT(){S.tsig='';save();sigT()}
 function VS(){const c=S.cfg;return `<div class="top"><h1>Instellingen</h1><button class="b2" onclick="go('list')">Klaar</button></div>
+${window.CLOUDCARD?CLOUDCARD():''}
+<div class="c"><h2>Werkbon naar VET Work</h2><p class="mu">Deze werken komen automatisch op de werkbon die je vanuit een onderhoud maakt (één per regel). Gebruik dezelfde namen als de artikels in VET Work, dan komen de prijzen er vanzelf bij.</p><textarea oninput="S.cfg.wbArt=this.value;sv()">${esc(c.wbArt||'Onderhoud verwarmingsketel\nVerbrandingsanalyse')}</textarea></div>
 <div class="c"><h2>Technicus</h2>${FC('tech.naam','Voornaam en achternaam')}<div class="g2">${FC('tech.gv','Erkenningsnummer GV (gas)')}${FC('tech.tv','Erkenningsnummer TV (stookolie)')}</div>
 <p class="mu" style="margin:0">Laat TV leeg zolang je geen erkenning vloeibare brandstof hebt. Attesten voor stookolie worden dan geblokkeerd.</p></div>
 <div class="c"><h2>Handtekening technicus</h2><p class="mu">Wordt automatisch op elk attest geplaatst.</p><canvas id="sg2"></canvas><button class="b2" style="margin-top:8px" onclick="clrT()">Wissen</button></div>
@@ -371,6 +384,7 @@ ${j.at.anders?`<div class="sub">${F('at.naam','Naam / gebouw (optioneel)')}${F('
 <h3>Aansluiting (NBN CR 1749)</h3>${SEG('km.aansl',[['B','Type B (open)'],['C','Type C (gesloten)']])}
 <button class="b2" style="margin-top:8px;width:100%" onclick="SCHOUW.show(J().km.aansl,pickCode)">📖 Overzicht schouwaansluitingen (met tekening)</button>
 ${j.km.aansl?`<div class="cks" style="margin-top:8px">${SCHOUW.codes(j.km.aansl).map(c=>`<button class="ck ${j.km.code==c?'on':''}" onclick="pickCode('${c}')">${c}</button>`).join('')}</div><div style="margin-top:8px">${F('km.code','Exacte indeling (of zelf invullen)')}</div>`:''}
+<h3>Type verwarming</h3>${SEG('km.verw',[['individueel','Individueel'],['collectief','Collectief']])}
 <h3>Brandstof</h3>${SEG('km.brandstof',[['gas','Gas'],['vloeibaar','Stookolie'],['vast','Vast']])}
 ${b=='gas'?`<h3>Gas</h3>${SEG('km.gassoort',[['aardgas','Aardgas'],['lpg','LPG'],['andere','Andere']])}${j.km.gassoort=='andere'?`<div style="margin-top:8px">${F('km.gasAndereTxt','Andere, namelijk')}</div>`:''}
 <h3>Brander</h3>${SEG('km.branderType',[['nietpremix','Niet-premix (GI)'],['premix','Premix (GI)'],['ventilator','Ventilatorbrander (GII)']])}`:''}
@@ -421,6 +435,7 @@ ${j.att.rein?`<label class="f"><span>Te treffen maatregelen om deze gebreken weg
 <div id="miss">${MISS(j)}</div>
 
 ${VEKA(j)}
+<div class="c"><h2>Werkbon (VET Work)</h2>${j.wb?`<p style="margin:0 0 8px">✓ Werkbon aangemaakt op ${dt(j.wb.d)}${(S.outbox||[]).some(o=>o.id==j.wb.id)?' – wordt verstuurd zodra je online bent':''}.</p>`:'<p class="mu" style="margin:0 0 8px">Maak met één tik een werkbon in VET Work met klant, datum, werktijd en uitgevoerde werken al ingevuld.</p>'}<button class="b2" onclick="makeWerkbon()">📝 ${j.wb?'Nog een werkbon maken':'Maak werkbon in VET Work'}</button></div>
 <div class="row wrap" style="margin-bottom:12px">${done?'<button class="b2" onclick="reopen()">Heropenen</button>':'<button class="ok" onclick="fin()">Onderhoud afronden</button>'}${j.att.rein&&j.att.verb?`<button onclick="pdfK=!pdfK;R();scrollTo(0,document.body.scrollHeight)">PDF ▾</button>`:`<button onclick="pdf()">Exporteer als pdf</button>`}<button class="red" onclick="delJ()">Verwijderen</button></div>
 ${pdfK?`<div class="c"><h2>PDF exporteren</h2><div class="row wrap"><button onclick="pdf(0,'beide')">Beide attesten</button><button class="b2" onclick="pdf(0,'verb')">Verbrandingsattest</button><button class="b2" onclick="pdf(0,'rein')">Reinigingsattest</button></div></div>`:''}<div style="height:24px"></div>`}
 
@@ -442,4 +457,7 @@ if('serviceWorker' in navigator){const had=!!navigator.serviceWorker.controller;
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!window._rl){window._rl=1;location.reload()}})}
 navigator.storage?.persist?.();
 load().then(()=>{S.clients=S.clients||[];S.jobs=S.jobs||[];S.jobs.forEach(j=>{if(j.tickets){j.tickP1=(j.tickP1||[]).concat(j.tickets);delete j.tickets}j.tickP1=j.tickP1||[];j.tickP2=j.tickP2||[]});S.cfg=Object.assign(JSON.parse(JSON.stringify(CFG0)),S.cfg||{});if((S.cfg.limV||0)<2){S.cfg.lim={co:'150',hiB:'88',hiC:'90',trekB:'-3',rook:S.cfg.lim?.rook||''};S.cfg.limV=2;save()}R()});
-</script></body></html>
+</script>
+<script src="vet-sync.js"></script>
+<script src="heat-cloud.js"></script>
+</body></html>
