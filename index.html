@@ -125,13 +125,15 @@ const fuel=j=>FUEL[j.km.brandstof]||'';
 const chkFor=j=>CHECKS.filter(x=>x[2].includes(fuel(j))&&!(x[0]=='condens'&&j.km.aansl=='C')&&!(x[0]=='dichtheidRga'&&j.km.aansl=='B')&&!(x[0]=='drukRga'&&j.km.aansl=='C'));
 const rowsFor=j=>{const f=fuel(j);return f?ROWS.filter(r=>r[3].includes(f)):[]};
 const cols=j=>['p1'].concat(j.verb.laag?['low']:[]).concat(j.verb.hoog?['high']:[]);
+/* CO: enkel de eindmeting (Proef II: laag-/hooglast) bepaalt goed/afgekeurd. Zonder eindmeting is Proef I de enige (= eind)meting. */
+const keurCols=(r,j)=>{if(r=='co'){const e=cols(j).filter(c=>c!='p1'&&!isNaN(num(j.verb.meet.co?.[c])));if(e.length)return e}return cols(j)};
 function setM(r,c,x){const j=J(),m=j.verb.meet;(m[r]??={})[c]=x;
  if(r=='tnet')j.verb.tnetMan[c]=x!=='';
  if((r=='tg'||r=='ta')&&!j.verb.tnetMan[c]){const a=num(m.tg?.[c]),b=num(m.ta?.[c]);const t=isNaN(a)||isNaN(b)?'':fmt(a-b);(m.tnet??={})[c]=t;const e=$('#m_tnet_'+c);if(e)e.value=t}
  upHint(r);if(OKR.includes(r)){autoOK(j);upOK()}upMiss();sv()}
 function setOK(p,x){const j=J(),o=j.verb[p.split('.')[0]],k=p.split('.')[1];if(p.startsWith('okNok.')&&auto(k,j))return;if(p=='checks.drukRga'&&autoDruk(j))return;o[k]=o[k]==x?'':x;save();R()}
 /* automatische keuring t.o.v. grenswaarden (CO max, rendement min): null = geen grenswaarde of nog geen meting */
-function auto(r,j=J()){const l=limit(r,j);if(!l)return null;const vals=cols(j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return null;
+function auto(r,j=J()){const l=limit(r,j);if(!l)return null;const vals=keurCols(r,j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return null;
  return (l.max!=null&&Math.max(...vals)>l.max)||(l.min!=null&&Math.min(...vals)<l.min)?'nok':'ok'}
 /* type B: trek in het rookgasafvoerkanaal moet minstens 3 Pa onderdruk zijn; een waarde boven -3 Pa (bv. -2, 0 of +1) = afgekeurd */
 function autoDruk(j=J()){const l=num(S.cfg.lim.trekB),v=num(j.verb.drukPa);if(j.km.aansl!='B'||isNaN(l)||isNaN(v)||!chkFor(j).some(x=>x[0]=='drukRga'))return null;return v>l?'nok':'ok'}
@@ -148,7 +150,7 @@ const MISS=j=>{const m=missing(j);return m.length?`<div class="c"><h2>Nog in te 
 let mT;function upMiss(){clearTimeout(mT);mT=setTimeout(()=>{const e=$('#miss'),j=J();if(e&&j)e.innerHTML=MISS(j)},250)}
 /* grenswaarden: CO max voor type B en C; rendement Hi min hangt af van type B (88 %) of C (90 %) */
 function limit(r,j=J()){const L=S.cfg.lim,t=j.km.aansl;if(r=='co'){const l=num(L.co);return isNaN(l)?null:{max:l}}if(r=='hi'){const l=num(t=='B'?L.hiB:t=='C'?L.hiC:NaN);return isNaN(l)?null:{min:l}}if(r=='rookindex'){const l=num(L.rook);return isNaN(l)?null:{max:l}}return null}
-function hint(r,j=J()){const l=limit(r,j);if(!l)return'';const vals=cols(j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return'';
+function hint(r,j=J()){const l=limit(r,j);if(!l)return'';const vals=keurCols(r,j).map(c=>num(j.verb.meet[r]?.[c])).filter(x=>!isNaN(x));if(!vals.length)return'';
  if(l.max!=null&&Math.max(...vals)>l.max)return'boven grenswaarde '+fmt(l.max);if(l.min!=null&&Math.min(...vals)<l.min)return'onder grenswaarde '+fmt(l.min);return''}
 function upHint(r){const e=$('#h_'+r);if(e)e.textContent=hint(r)}
 
