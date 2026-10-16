@@ -125,8 +125,8 @@ const fuel=j=>FUEL[j.km.brandstof]||'';
 const chkFor=j=>CHECKS.filter(x=>x[2].includes(fuel(j))&&!(x[0]=='condens'&&j.km.aansl=='C')&&!(x[0]=='dichtheidRga'&&j.km.aansl=='B')&&!(x[0]=='drukRga'&&j.km.aansl=='C'));
 const rowsFor=j=>{const f=fuel(j);return f?ROWS.filter(r=>r[3].includes(f)):[]};
 const cols=j=>['p1'].concat(j.verb.laag?['low']:[]).concat(j.verb.hoog?['high']:[]);
-/* CO: enkel de eindmeting (Proef II: laag-/hooglast) bepaalt goed/afgekeurd. Zonder eindmeting is Proef I de enige (= eind)meting. */
-const keurCols=(r,j)=>{if(r=='co'){const e=cols(j).filter(c=>c!='p1'&&!isNaN(num(j.verb.meet.co?.[c])));if(e.length)return e}return cols(j)};
+/* CO en rendement: enkel de eindmeting (Proef II: laag-/hooglast) bepaalt goed/afgekeurd. Zonder eindmeting is Proef I de enige (= eind)meting. */
+const keurCols=(r,j)=>{if(r=='co'||r=='hi'){const e=cols(j).filter(c=>c!='p1'&&!isNaN(num(j.verb.meet[r]?.[c])));if(e.length)return e}return cols(j)};
 function setM(r,c,x){const j=J(),m=j.verb.meet;(m[r]??={})[c]=x;
  if(r=='tnet')j.verb.tnetMan[c]=x!=='';
  if((r=='tg'||r=='ta')&&!j.verb.tnetMan[c]){const a=num(m.tg?.[c]),b=num(m.ta?.[c]);const t=isNaN(a)||isNaN(b)?'':fmt(a-b);(m.tnet??={})[c]=t;const e=$('#m_tnet_'+c);if(e)e.value=t}
